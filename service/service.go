@@ -11,6 +11,7 @@ import (
 	"relay/validator"
 	"strings"
 
+	"blitiri.com.ar/go/spf"
 	"github.com/DusanKasan/parsemail"
 	"github.com/mhale/smtpd"
 )
@@ -51,12 +52,12 @@ func (m *Relay) handler() smtpd.Handler {
 			fmt.Println("parse mail err", err)
 			return err
 		}
-		// subject := msg.Header.Get("Subject")
-		// log.Printf("Received mail from %s for %s with subject %s", from, to[0], subject)
 		ip, ok := origin.(*net.TCPAddr)
 		if !ok {
-			fmt.Println("tcp err")
 			return errors.New("couldnt cast origin to tcp")
+		}
+		if len(parsedMail.From) > 0 {
+			from = parsedMail.From[0].Address
 		}
 		domain := strings.Split(from, "@")[1]
 		spfResult, _ := validator.ValidateSPF(ip.IP, domain, from)
@@ -69,9 +70,12 @@ func (m *Relay) handler() smtpd.Handler {
 		}
 		err = json.Unmarshal(marshalResult, &dataMap)
 		if err != nil {
-			fmt.Println("unmarshal error")
+			return err
 		}
 		m.logger.Log(dataMap)
+		if spfResult != spf.Pass {
+			return errors.New("SPF fail")
+		}
 		return nil
 	}
 }
