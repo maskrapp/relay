@@ -8,11 +8,11 @@ import (
 	"blitiri.com.ar/go/spf"
 )
 
-func ValidateSPF(ip net.IP, domain string, sender string) error {
+func ValidateSPF(ip net.IP, domain string, sender string) (spf.Result, error) {
 	result, _ := spf.CheckHostWithSender(ip, domain, sender)
 	if result == spf.Pass {
-		return nil
+		return spf.Pass, nil
 	}
 	message := fmt.Sprintf("expected PASS, got %v", result)
-	return errors.New(message)
+	return result, errors.New(message)
 }

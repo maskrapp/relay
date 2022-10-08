@@ -3,22 +3,24 @@ package service
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net"
-	"net/mail"
+	"relay/logger"
 	"relay/validator"
 	"strings"
 
+	"github.com/DusanKasan/parsemail"
 	"github.com/mhale/smtpd"
 )
 
 type Relay struct {
-	smtpd *smtpd.Server
+	smtpd  *smtpd.Server
+	logger *logger.Logger
 }
 
-func New(privateKeyPath, certificatePath string) *Relay {
+func New(privateKeyPath, certificatePath, mongoURI string) *Relay {
 	cert, err := tls.LoadX509KeyPair(certificatePath, privateKeyPath)
 	if err != nil {
 		panic(err)
@@ -34,6 +36,7 @@ func New(privateKeyPath, certificatePath string) *Relay {
 		},
 	}
 	relay.smtpd = smtpdServer
+	relay.logger = logger.New(mongoURI)
 	return relay
 }
 
@@ -43,23 +46,32 @@ func (m *Relay) Start() error {
 
 func (m *Relay) handler() smtpd.Handler {
 	return func(origin net.Addr, from string, to []string, data []byte) error {
-		msg, err := mail.ReadMessage(bytes.NewReader(data))
+		parsedMail, err := parsemail.Parse(bytes.NewReader(data))
 		if err != nil {
-			panic(err)
+			fmt.Println("parse mail err", err)
+			return err
 		}
-		subject := msg.Header.Get("Subject")
-		log.Printf("Received mail from %s for %s with subject %s", from, to[0], subject)
-		fmt.Println("data", string(data))
+		// subject := msg.Header.Get("Subject")
+		// log.Printf("Received mail from %s for %s with subject %s", from, to[0], subject)
 		ip, ok := origin.(*net.TCPAddr)
 		if !ok {
+			fmt.Println("tcp err")
 			return errors.New("couldnt cast origin to tcp")
 		}
 		domain := strings.Split(from, "@")[1]
-		err = validator.ValidateSPF(ip.IP, domain, from)
-		if err != nil {
-			fmt.Println(err)
-			return err
+		spfResult, _ := validator.ValidateSPF(ip.IP, domain, from)
+		dataMap := map[string]interface{}{
+			"spf_result": string(spfResult),
 		}
+		marshalResult, err := json.Marshal(parsedMail)
+		if err != nil {
+			fmt.Println("marshal error")
+		}
+		err = json.Unmarshal(marshalResult, &dataMap)
+		if err != nil {
+			fmt.Println("unmarshal error")
+		}
+		m.logger.Log(dataMap)
 		return nil
 	}
 }
