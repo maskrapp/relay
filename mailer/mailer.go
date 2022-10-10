@@ -18,7 +18,20 @@ func New(token string) *Mailer {
 	}
 }
 
-func (m *Mailer) ForwardMail(receiver, sender, subject, htmlBody, textBody string) error {
+func (m *Mailer) transformRecipients(to []string) []map[string]interface{} {
+	data := make([]map[string]interface{}, 0)
+	for _, v := range to {
+		entry := map[string]interface{}{
+			"email_address": map[string]interface{}{
+				"address": v,
+			},
+		}
+		data = append(data, entry)
+	}
+	return data
+}
+
+func (m *Mailer) ForwardMail(sender, subject, htmlBody, textBody string, recipients []string) error {
 	body := map[string]interface{}{
 		"bounce_address": "bounce@bounce.maskr.app",
 		"htmlbody":       htmlBody,
@@ -28,13 +41,7 @@ func (m *Mailer) ForwardMail(receiver, sender, subject, htmlBody, textBody strin
 			"address": "no-reply@maskr.app",
 			"name":    sender,
 		},
-		"to": []map[string]interface{}{
-			{
-				"email_address": map[string]interface{}{
-					"address": receiver,
-				},
-			},
-		},
+		"to": m.transformRecipients(recipients),
 	}
 	data, err := json.Marshal(body)
 	if err != nil {

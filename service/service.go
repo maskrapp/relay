@@ -39,7 +39,6 @@ func New(production bool, privateKeyPath, certificatePath, postgresURI, mailerTo
 		TLSRequired: true,
 		TLSConfig:   &tls.Config{Certificates: []tls.Certificate{cert}},
 		AuthHandler: func(remoteAddr net.Addr, mechanism string, username, password, shared []byte) (bool, error) {
-			fmt.Println(remoteAddr, mechanism, username, password, shared)
 			return false, errors.New("Unauthorized")
 		},
 	}
@@ -67,11 +66,11 @@ func (m *Relay) handler() smtpd.Handler {
 			m.logger.Error("error parsing incoming email:", err)
 			return err
 		}
-		fmt.Println("to", parsedMail.To)
 		ip, ok := origin.(*net.TCPAddr)
 		if !ok {
 			return errors.New("couldnt cast origin to tcp")
 		}
+
 		if len(parsedMail.From) > 0 && parsedMail.From[0] != nil {
 			from = parsedMail.From[0].Address
 		}
@@ -82,21 +81,36 @@ func (m *Relay) handler() smtpd.Handler {
 			m.logger.Error(logMessage)
 			return errors.New("SPF fail")
 		}
-		var recipient = to[0]
-		result, err := m.getMask(recipient)
-		if err != nil {
-			return err
+		recipients := m.getValidRecipients(to)
+		if len(recipients) == 0 {
+			return errors.New("not a valid recipient")
 		}
-		err = m.mailer.ForwardMail(result.Email, parsedMail.From[0].Name, parsedMail.Subject, parsedMail.HTMLBody, parsedMail.TextBody)
+		err = m.mailer.ForwardMail(parsedMail.From[0].Name, parsedMail.Subject, parsedMail.HTMLBody, parsedMail.TextBody, recipients)
 		if err != nil {
 			m.logger.Error(err)
 			return err
 		}
-		logMessage := fmt.Sprintf("Forwarded mail from address %v, to %v", parsedMail.To[0].Address, result.Email)
-		m.logger.Info(logMessage)
+		m.logger.Info("Forwarded mail to", recipients)
 		return nil
 	}
 }
+
+func (m *Relay) getValidRecipients(to []string) []string {
+	recipients := make([]string, 0)
+	for _, v := range to {
+		//TODO: support more domains in the future
+		if strings.Split(v, "@")[1] == "relay.maskr.app" {
+			result, err := m.getMask(v)
+			if err == nil {
+				if result.Enabled {
+					recipients = append(recipients, result.Email)
+				}
+			}
+		}
+	}
+	return recipients
+}
+func (m *Relay) Handle(email *parsemail.Email, to, from string) {}
 
 type record struct {
 	Mask    string `json:"mask"`
