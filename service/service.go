@@ -2,7 +2,6 @@ package service
 
 import (
 	"bytes"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -25,10 +24,6 @@ type Relay struct {
 }
 
 func New(production bool, privateKeyPath, certificatePath, postgresURI, mailerToken string) *Relay {
-	cert, err := tls.LoadX509KeyPair(certificatePath, privateKeyPath)
-	if err != nil {
-		panic(err)
-	}
 	relay := &Relay{}
 	db, err := gorm.Open(postgres.Open(postgresURI), &gorm.Config{})
 	if err != nil {
@@ -37,7 +32,6 @@ func New(production bool, privateKeyPath, certificatePath, postgresURI, mailerTo
 	smtpdServer := &smtpd.Server{
 		Handler:     relay.handler(),
 		TLSRequired: true,
-		TLSConfig:   &tls.Config{Certificates: []tls.Certificate{cert}},
 		AuthHandler: func(remoteAddr net.Addr, mechanism string, username, password, shared []byte) (bool, error) {
 			return false, errors.New("Unauthorized")
 		},
@@ -60,7 +54,6 @@ func (m *Relay) Start() {
 
 func (m *Relay) handler() smtpd.Handler {
 	return func(origin net.Addr, from string, to []string, data []byte) error {
-		//TODO: run the following code for every valid element in the 'to' array.
 		parsedMail, err := parsemail.Parse(bytes.NewReader(data))
 		if err != nil {
 			m.logger.Error("error parsing incoming email:", err)
