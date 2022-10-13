@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"relay/mailer"
-	"relay/validator"
 	"strings"
 
 	"github.com/DusanKasan/parsemail"
+	"github.com/maskrapp/relay/mailer"
+	"github.com/maskrapp/relay/validator"
 	"github.com/mhale/smtpd"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"

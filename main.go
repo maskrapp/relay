@@ -2,9 +2,9 @@ package main
 
 import (
 	"os"
-	"relay/service"
 
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/maskrapp/relay/service"
 )
 
 func main() {
