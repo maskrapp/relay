@@ -8,11 +8,12 @@ import (
 )
 
 func main() {
-	keyPath := os.Getenv("KEY_PATH")
-	certPath := os.Getenv("CERT_PATH")
-	postgresURI := os.Getenv("POSTGRES_URI")
+	dbUser := os.Getenv("POSTGRES_USER")
+	dbPassword := os.Getenv("POSTGRES_PASSWORD")
+	dbHost := os.Getenv("POSTGRES_HOST")
+	dbDatabase := os.Getenv("POSTGRES_DATABASE")
 	token := os.Getenv("MAIL_TOKEN")
 	production := os.Getenv("PRODUCTION") == "true"
-	relay := service.New(production, keyPath, certPath, postgresURI, token)
+	relay := service.New(production, dbUser, dbPassword, dbHost, dbDatabase, token)
 	relay.Start()
 }

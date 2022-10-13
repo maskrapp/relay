@@ -23,12 +23,14 @@ type Relay struct {
 	db     *gorm.DB
 }
 
-func New(production bool, privateKeyPath, certificatePath, postgresURI, mailerToken string) *Relay {
-	relay := &Relay{}
-	db, err := gorm.Open(postgres.Open(postgresURI), &gorm.Config{})
+func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken string) *Relay {
+	relay := &Relay{logger: logrus.New()}
+	uri := fmt.Sprintf("postgres://%v:%v@%v/%v", dbUser, dbPassword, dbHost, dbDatabase)
+	db, err := gorm.Open(postgres.Open(uri), &gorm.Config{})
 	if err != nil {
-		panic(err)
+		logrus.Panic(err)
 	}
+	logrus.Info("Succesfully connected to DB")
 	smtpdServer := &smtpd.Server{
 		Handler:     relay.handler(),
 		TLSRequired: true,
@@ -36,10 +38,8 @@ func New(production bool, privateKeyPath, certificatePath, postgresURI, mailerTo
 			return false, errors.New("Unauthorized")
 		},
 	}
-
 	relay.db = db
 	relay.smtpd = smtpdServer
-	relay.logger = logrus.New()
 	relay.mailer = mailer.New(mailerToken)
 	return relay
 }
