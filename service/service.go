@@ -26,6 +26,7 @@ type Relay struct {
 func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken string) *Relay {
 	relay := &Relay{logger: logrus.New()}
 	uri := fmt.Sprintf("postgres://%v:%v@%v/%v", dbUser, dbPassword, dbHost, dbDatabase)
+	logrus.Info("Connecting to DB with URI:", uri)
 	db, err := gorm.Open(postgres.Open(uri), &gorm.Config{})
 	if err != nil {
 		logrus.Panic(err)
@@ -45,7 +46,7 @@ func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken st
 }
 
 func (m *Relay) Start() {
-	fmt.Println("Starting service...")
+	m.logger.Info("Starting service...")
 	err := m.smtpd.ListenAndServe()
 	if err != nil {
 		m.logger.Error("SMTPD error", err)
