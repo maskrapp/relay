@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -23,21 +24,29 @@ type Relay struct {
 	db     *gorm.DB
 }
 
-func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken string) *Relay {
+func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, certificate, key string) *Relay {
 	relay := &Relay{logger: logrus.New()}
 	uri := fmt.Sprintf("postgres://%v:%v@%v/%v", dbUser, dbPassword, dbHost, dbDatabase)
 	logrus.Info("Connecting to DB with URI:", uri)
 	db, err := gorm.Open(postgres.Open(uri), &gorm.Config{})
 	if err != nil {
-		logrus.Panic(err)
+		relay.logger.Panic(err)
 	}
-	logrus.Info("Succesfully connected to DB")
+	relay.logger.Info("Succesfully connected to DB")
 	smtpdServer := &smtpd.Server{
-		Handler:     relay.handler(),
-		TLSRequired: true,
+		Handler: relay.handler(),
 		AuthHandler: func(remoteAddr net.Addr, mechanism string, username, password, shared []byte) (bool, error) {
 			return false, errors.New("Unauthorized")
 		},
+	}
+	if production {
+		cert, err := tls.X509KeyPair([]byte(certificate), []byte(key))
+		if err != nil {
+			relay.logger.Panic(err)
+		}
+		smtpdServer.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
+		smtpdServer.TLSRequired = true
+		relay.logger.Info("Enabled TLS support")
 	}
 	relay.db = db
 	relay.smtpd = smtpdServer

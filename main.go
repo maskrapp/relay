@@ -14,6 +14,8 @@ func main() {
 	dbDatabase := os.Getenv("POSTGRES_DATABASE")
 	token := os.Getenv("MAIL_TOKEN")
 	production := os.Getenv("PRODUCTION") == "true"
-	relay := service.New(production, dbUser, dbPassword, dbHost, dbDatabase, token)
+	certificate := os.Getenv("CERTIFICATE")
+	privateKey := os.Getenv("PRIVATE_KEY")
+	relay := service.New(production, dbUser, dbPassword, dbHost, dbDatabase, token, certificate, privateKey)
 	relay.Start()
 }
