@@ -2,32 +2,35 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/DusanKasan/parsemail"
 	"github.com/maskrapp/relay/mailer"
+	"github.com/maskrapp/relay/smtpd"
 	"github.com/maskrapp/relay/validator"
-	"github.com/mhale/smtpd"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 type Relay struct {
-	smtpd  *smtpd.Server
-	logger *logrus.Logger
-	mailer *mailer.Mailer
-	db     *gorm.DB
+	smtpd       *smtpd.Server
+	logger      *logrus.Logger
+	mailer      *mailer.Mailer
+	db          *gorm.DB
+	healthcheck *http.Server
 }
 
 func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, certificate, key string) *Relay {
 	relay := &Relay{logger: logrus.New()}
 	uri := fmt.Sprintf("postgres://%v:%v@%v/%v", dbUser, dbPassword, dbHost, dbDatabase)
-	logrus.Info("Connecting to DB with URI:", uri)
 	db, err := gorm.Open(postgres.Open(uri), &gorm.Config{})
 	if err != nil {
 		relay.logger.Panic(err)
@@ -51,11 +54,21 @@ func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, c
 	relay.db = db
 	relay.smtpd = smtpdServer
 	relay.mailer = mailer.New(mailerToken)
+	relay.healthcheck = relay.createHealthcheckServer()
 	return relay
+}
+
+func (m *Relay) createHealthcheckServer() *http.Server {
+	srv := &http.Server{Addr: ":80"}
+	srv.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("healthy"))
+	})
+	return srv
 }
 
 func (m *Relay) Start() {
 	m.logger.Info("Starting service...")
+	go m.healthcheck.ListenAndServe()
 	err := m.smtpd.ListenAndServe()
 	if err != nil {
 		m.logger.Error("SMTPD error", err)
@@ -73,7 +86,7 @@ func (m *Relay) handler() smtpd.Handler {
 		if !ok {
 			return errors.New("couldnt cast origin to tcp")
 		}
-
+		m.logger.Info("Incoming mail:", parsedMail)
 		if len(parsedMail.From) > 0 && parsedMail.From[0] != nil {
 			from = parsedMail.From[0].Address
 		}
@@ -113,7 +126,27 @@ func (m *Relay) getValidRecipients(to []string) []string {
 	}
 	return recipients
 }
-func (m *Relay) Handle(email *parsemail.Email, to, from string) {}
+
+func (r *Relay) Shutdown() {
+	r.logger.Info("Gracefully shutting down...")
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		err := r.smtpd.Shutdown(context.TODO())
+		if err != nil {
+			r.logger.Error(err)
+		}
+		wg.Done()
+	}()
+	go func() {
+		err := r.healthcheck.Shutdown(context.TODO())
+		if err != nil {
+			r.logger.Error(err)
+		}
+		wg.Done()
+	}()
+	wg.Wait()
+}
 
 type record struct {
 	Mask    string `json:"mask"`

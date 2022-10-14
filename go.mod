@@ -2,10 +2,7 @@ module github.com/maskrapp/relay
 
 go 1.18
 
-require (
-	blitiri.com.ar/go/spf v1.5.1
-	github.com/mhale/smtpd v0.8.0
-)
+require blitiri.com.ar/go/spf v1.5.1
 
 require (
 	github.com/DusanKasan/parsemail v1.2.0
@@ -14,6 +11,8 @@ require (
 )
 
 require (
+	github.com/blend/go-sdk v1.20220411.3 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgconn v1.13.0 // indirect
 	github.com/jackc/pgio v1.0.0 // indirect
