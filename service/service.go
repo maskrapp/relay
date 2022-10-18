@@ -38,6 +38,7 @@ func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, c
 	relay.logger.Info("Succesfully connected to DB")
 	smtpdServer := &smtpd.Server{
 		Handler: relay.handler(),
+		Addr:    "0.0.0.0:25",
 		AuthHandler: func(remoteAddr net.Addr, mechanism string, username, password, shared []byte) (bool, error) {
 			return false, errors.New("Unauthorized")
 		},
@@ -59,7 +60,7 @@ func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, c
 }
 
 func (m *Relay) createHealthcheckServer() *http.Server {
-	srv := &http.Server{Addr: ":80"}
+	srv := &http.Server{Addr: "0.0.0.0:80"}
 	srv.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("healthy"))
 	})
