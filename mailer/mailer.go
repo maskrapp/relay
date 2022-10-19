@@ -51,11 +51,13 @@ func (m *Mailer) ForwardMail(sender, subject, htmlBody, textBody string, recipie
 	request, err := http.NewRequest("POST", "https://api.zeptomail.eu/v1.1/email", bytes.NewBuffer(data))
 	if err != nil {
 		return err
+
 	}
+	authHeader := fmt.Sprintf("Zoho-enczapikey %v", m.token)
 	request.Header = map[string][]string{
 		"Accept":        {"application/json"},
 		"Content-Type":  {"application/json"},
-		"Authorization": {m.token},
+		"Authorization": {authHeader},
 	}
 	resp, err := client.Do(request)
 	if err != nil {
