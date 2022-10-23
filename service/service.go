@@ -85,9 +85,11 @@ func (m *Relay) handler() smtpd.Handler {
 		}
 		ip, ok := origin.(*net.TCPAddr)
 		if !ok {
-			return errors.New("couldnt cast origin to tcp")
+			return errors.New("couldn't cast origin to TCP")
 		}
+
 		m.logger.Info("Incoming mail:", parsedMail)
+
 		if len(parsedMail.From) > 0 && parsedMail.From[0] != nil {
 			from = parsedMail.From[0].Address
 		}
@@ -100,7 +102,8 @@ func (m *Relay) handler() smtpd.Handler {
 		}
 		recipients := m.getValidRecipients(to)
 		if len(recipients) == 0 {
-			return errors.New("not a valid recipient")
+			m.logger.Info("found no valid recipients for ", to)
+			return nil
 		}
 		err = m.mailer.ForwardMail(parsedMail.From[0].Name, parsedMail.Subject, parsedMail.HTMLBody, parsedMail.TextBody, recipients)
 		if err != nil {
