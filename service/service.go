@@ -59,7 +59,7 @@ func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, c
 	return relay
 }
 
-func (r *Relay) createHealthcheckServer() *http.Server {
+func (*Relay) createHealthcheckServer() *http.Server {
 	srv := &http.Server{Addr: "0.0.0.0:80"}
 	srv.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("healthy"))
@@ -105,12 +105,16 @@ func (r *Relay) handler() smtpd.Handler {
 			r.logger.Info("found no valid recipients for ", to)
 			return nil
 		}
-		err = r.mailer.ForwardMail(parsedMail.From[0].Name, parsedMail.Subject, parsedMail.HTMLBody, parsedMail.TextBody, recipients)
+		forwardAddress := "no-reply@maskr.app"
+		if len(to) == 1 {
+			forwardAddress = to[0]
+		}
+		err = r.mailer.ForwardMail(parsedMail.From[0].Name, forwardAddress, parsedMail.Subject, parsedMail.HTMLBody, parsedMail.TextBody, recipients)
 		if err != nil {
 			r.logger.Error(err)
 			return err
 		}
-		r.logger.Info("Forwarded mail to", recipients)
+		r.logger.Info("Forwarded mail to", recipients, "from address", forwardAddress)
 		return nil
 	}
 }

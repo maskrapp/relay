@@ -31,14 +31,14 @@ func (m *Mailer) transformRecipients(to []string) []map[string]interface{} {
 	return data
 }
 
-func (m *Mailer) ForwardMail(sender, subject, htmlBody, textBody string, recipients []string) error {
+func (m *Mailer) ForwardMail(sender, forwardAddress, subject, htmlBody, textBody string, recipients []string) error {
 	body := map[string]interface{}{
 		"bounce_address": "bounce@bounce.maskr.app",
 		"htmlbody":       htmlBody,
 		"textbody":       textBody,
 		"subject":        subject,
 		"from": map[string]interface{}{
-			"address": "no-reply@maskr.app",
+			"address": forwardAddress,
 			"name":    sender,
 		},
 		"to": m.transformRecipients(recipients),
