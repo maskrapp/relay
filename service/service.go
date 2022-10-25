@@ -59,7 +59,7 @@ func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, c
 	return relay
 }
 
-func (m *Relay) createHealthcheckServer() *http.Server {
+func (r *Relay) createHealthcheckServer() *http.Server {
 	srv := &http.Server{Addr: "0.0.0.0:80"}
 	srv.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("healthy"))
@@ -67,20 +67,20 @@ func (m *Relay) createHealthcheckServer() *http.Server {
 	return srv
 }
 
-func (m *Relay) Start() {
-	m.logger.Info("Starting service...")
-	go m.healthcheck.ListenAndServe()
-	err := m.smtpd.ListenAndServe()
+func (r *Relay) Start() {
+	r.logger.Info("Starting service...")
+	go r.healthcheck.ListenAndServe()
+	err := r.smtpd.ListenAndServe()
 	if err != nil {
-		m.logger.Error("SMTPD error", err)
+		r.logger.Error("SMTPD error", err)
 	}
 }
 
-func (m *Relay) handler() smtpd.Handler {
+func (r *Relay) handler() smtpd.Handler {
 	return func(origin net.Addr, from string, to []string, data []byte) error {
 		parsedMail, err := parsemail.Parse(bytes.NewReader(data))
 		if err != nil {
-			m.logger.Error("error parsing incoming email:", err)
+			r.logger.Error("error parsing incoming email:", err)
 			return err
 		}
 		ip, ok := origin.(*net.TCPAddr)
@@ -88,7 +88,7 @@ func (m *Relay) handler() smtpd.Handler {
 			return errors.New("couldn't cast origin to TCP")
 		}
 
-		m.logger.Info("Incoming mail:", parsedMail)
+		r.logger.Info("Incoming mail:", parsedMail)
 
 		if len(parsedMail.From) > 0 && parsedMail.From[0] != nil {
 			from = parsedMail.From[0].Address
@@ -97,30 +97,30 @@ func (m *Relay) handler() smtpd.Handler {
 		spfResult, err := validator.ValidateSPF(ip.IP, domain, from)
 		if err != nil {
 			logMessage := fmt.Sprintf("SPF check failed for mail: %v expected pass but got %v", from, spfResult)
-			m.logger.Error(logMessage)
+			r.logger.Error(logMessage)
 			return errors.New("SPF fail")
 		}
-		recipients := m.getValidRecipients(to)
+		recipients := r.getValidRecipients(to)
 		if len(recipients) == 0 {
-			m.logger.Info("found no valid recipients for ", to)
+			r.logger.Info("found no valid recipients for ", to)
 			return nil
 		}
-		err = m.mailer.ForwardMail(parsedMail.From[0].Name, parsedMail.Subject, parsedMail.HTMLBody, parsedMail.TextBody, recipients)
+		err = r.mailer.ForwardMail(parsedMail.From[0].Name, parsedMail.Subject, parsedMail.HTMLBody, parsedMail.TextBody, recipients)
 		if err != nil {
-			m.logger.Error(err)
+			r.logger.Error(err)
 			return err
 		}
-		m.logger.Info("Forwarded mail to", recipients)
+		r.logger.Info("Forwarded mail to", recipients)
 		return nil
 	}
 }
 
-func (m *Relay) getValidRecipients(to []string) []string {
+func (r *Relay) getValidRecipients(to []string) []string {
 	recipients := make([]string, 0)
 	for _, v := range to {
 		//TODO: support more domains in the future
 		if strings.Split(v, "@")[1] == "relay.maskr.app" {
-			result, err := m.getMask(v)
+			result, err := r.getMask(v)
 			if err == nil {
 				if result.Enabled {
 					recipients = append(recipients, result.Email)
