@@ -6,16 +6,26 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 type Mailer struct {
-	token string
+	token      string
+	httpClient *http.Client
 }
 
 func New(token string) *Mailer {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConnsPerHost = 100
+	transport.MaxConnsPerHost = 100
+	transport.MaxIdleConnsPerHost = 100
+
 	return &Mailer{
 		token: token,
-	}
+		httpClient: &http.Client{
+			Timeout:   10 * time.Second,
+			Transport: transport,
+		}}
 }
 
 func (m *Mailer) transformRecipients(to []string) []map[string]interface{} {
@@ -47,7 +57,6 @@ func (m *Mailer) ForwardMail(sender, forwardAddress, subject, htmlBody, textBody
 	if err != nil {
 		return err
 	}
-	client := http.DefaultClient
 	request, err := http.NewRequest("POST", "https://api.zeptomail.eu/v1.1/email", bytes.NewBuffer(data))
 	if err != nil {
 		return err
@@ -59,7 +68,7 @@ func (m *Mailer) ForwardMail(sender, forwardAddress, subject, htmlBody, textBody
 		"Content-Type":  {"application/json"},
 		"Authorization": {authHeader},
 	}
-	resp, err := client.Do(request)
+	resp, err := m.httpClient.Do(request)
 	if err != nil {
 		return err
 	}
