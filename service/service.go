@@ -39,6 +39,9 @@ func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, c
 		AuthHandler: func(remoteAddr net.Addr, mechanism string, username, password, shared []byte) (bool, error) {
 			return false, errors.New("Unauthorized")
 		},
+		HandlerRcpt: func(remoteAddr net.Addr, from, to string) bool {
+			return relay.isValidRecipient(to)
+		},
 	}
 	if production {
 		cert, err := tls.X509KeyPair([]byte(certificate), []byte(key))
@@ -120,6 +123,19 @@ func (r *Relay) getValidRecipients(to []string) []string {
 		}
 	}
 	return recipients
+}
+
+func (r *Relay) isValidRecipient(to string) bool {
+	if strings.Split(to, "@")[1] != "relay.maskr.app" {
+		return false
+	}
+	var result struct {
+		Found bool
+	}
+
+	r.db.Raw("SELECT EXISTS(SELECT 1 FROM masks WHERE mask = ?) AS found",
+		to).Scan(&result)
+	return result.Found
 }
 
 func (r *Relay) Shutdown() {
