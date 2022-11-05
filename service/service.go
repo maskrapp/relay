@@ -13,9 +13,9 @@ import (
 
 	"github.com/DusanKasan/parsemail"
 	"github.com/maskrapp/relay/mailer"
-	"github.com/maskrapp/relay/smtpd"
 	"github.com/maskrapp/relay/validator"
 	"github.com/sirupsen/logrus"
+	"github.com/thohui/smtpd"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
