@@ -101,7 +101,7 @@ func (r *Relay) handler() smtpd.Handler {
 			r.logger.Error(err)
 			return err
 		}
-		r.logger.Info("Forwarded mail to", recipients, "from address", forwardAddress)
+		r.logger.Info("Forwarded mail to ", recipients, " from address ", forwardAddress)
 		return nil
 	}
 }
