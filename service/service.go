@@ -7,9 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/DusanKasan/parsemail"
 	"github.com/maskrapp/relay/mailer"
@@ -21,11 +19,10 @@ import (
 )
 
 type Relay struct {
-	smtpd       *smtpd.Server
-	logger      *logrus.Logger
-	mailer      *mailer.Mailer
-	db          *gorm.DB
-	healthcheck *http.Server
+	smtpd  *smtpd.Server
+	logger *logrus.Logger
+	mailer *mailer.Mailer
+	db     *gorm.DB
 }
 
 func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, certificate, key string) *Relay {
@@ -55,21 +52,11 @@ func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, c
 	relay.db = db
 	relay.smtpd = smtpdServer
 	relay.mailer = mailer.New(mailerToken)
-	relay.healthcheck = relay.createHealthcheckServer()
 	return relay
-}
-
-func (*Relay) createHealthcheckServer() *http.Server {
-	srv := &http.Server{Addr: "0.0.0.0:80"}
-	srv.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("healthy"))
-	})
-	return srv
 }
 
 func (r *Relay) Start() {
 	r.logger.Info("Starting service...")
-	go r.healthcheck.ListenAndServe()
 	err := r.smtpd.ListenAndServe()
 	if err != nil {
 		r.logger.Error("SMTPD error", err)
@@ -137,23 +124,10 @@ func (r *Relay) getValidRecipients(to []string) []string {
 
 func (r *Relay) Shutdown() {
 	r.logger.Info("Gracefully shutting down...")
-	wg := sync.WaitGroup{}
-	wg.Add(2)
-	go func() {
-		err := r.smtpd.Shutdown(context.TODO())
-		if err != nil {
-			r.logger.Error(err)
-		}
-		wg.Done()
-	}()
-	go func() {
-		err := r.healthcheck.Shutdown(context.TODO())
-		if err != nil {
-			r.logger.Error(err)
-		}
-		wg.Done()
-	}()
-	wg.Wait()
+	err := r.smtpd.Shutdown(context.TODO())
+	if err != nil {
+		r.logger.Error(err)
+	}
 }
 
 type record struct {
