@@ -40,6 +40,7 @@ func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, c
 			return false, errors.New("Unauthorized")
 		},
 		HandlerRcpt: func(remoteAddr net.Addr, from, to string) bool {
+			//TODO: validate from.
 			return relay.isValidRecipient(to)
 		},
 	}
@@ -109,9 +110,11 @@ func (r *Relay) handler() smtpd.Handler {
 	}
 }
 
+// TODO: move this to different pkg
 func (r *Relay) getValidRecipients(to []string) []string {
 	recipients := make([]string, 0)
 	for _, v := range to {
+		v = strings.ToLower(v)
 		//TODO: support more domains in the future
 		if strings.Split(v, "@")[1] == "relay.maskr.app" {
 			result, err := r.getMask(v)
@@ -125,7 +128,10 @@ func (r *Relay) getValidRecipients(to []string) []string {
 	return recipients
 }
 
+// TODO: move this to different pkg
 func (r *Relay) isValidRecipient(to string) bool {
+	to = strings.ToLower(to)
+	r.logger.Info("validating: ", to)
 	if strings.Split(to, "@")[1] != "relay.maskr.app" {
 		return false
 	}
