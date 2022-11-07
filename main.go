@@ -21,7 +21,7 @@ func main() {
 	relay := service.New(production, dbUser, dbPassword, dbHost, dbDatabase, token, certificate, privateKey)
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	relay.Start()
+	go relay.Start()
 	<-sigChan
 	relay.Shutdown()
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/DusanKasan/parsemail"
 	"github.com/maskrapp/relay/mailer"
@@ -146,7 +147,9 @@ func (r *Relay) isValidRecipient(to string) bool {
 
 func (r *Relay) Shutdown() {
 	r.logger.Info("Gracefully shutting down...")
-	err := r.smtpd.Shutdown(context.TODO())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	err := r.smtpd.Shutdown(ctx)
 	if err != nil {
 		r.logger.Error(err)
 	}
