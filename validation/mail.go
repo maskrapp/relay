@@ -39,18 +39,16 @@ func (v *MailValidator) Validate(domain, sender, mailStr string, ip net.IP) erro
 	}()
 	wg.Wait()
 
-	if spfResult != spf.Pass && dkimErr != nil {
-		message := fmt.Sprintf("mail from %v did not meet spf and dkim requirements. spf: %v dkim: %v dkim err %v", sender, spfResult, dkimResult, dkimErr)
-		return errors.New(message)
+	// for now, only one of the two checks has to pass in order for the entire thing to succeed. TODO: look into making this better.
+	if spfResult == spf.Pass || dkimErr == nil {
+		return nil
 	}
-	if dkimErr != nil && dkimErr != errNoDKIMRecord {
-		message := fmt.Sprintf("mail from %v did not meet spf and dkim requirements. spf: %v dkim: %v dkim err: %v", sender, spfResult, dkimResult, dkimErr)
-		return errors.New(message)
-	}
-	return nil
+
+	message := fmt.Sprintf("mail from %v did not meet spf and dkim requirements. spf: %v dkim: %v dkim err %v", sender, spfResult, dkimResult, dkimErr)
+	return errors.New(message)
 }
 
-var errNoDKIMRecord = errors.New("domain does not have any DKIM signatures")
+var errNoDKIMRecord = errors.New("domain does not have any DKIM DNS records")
 var errInvalidRecord = errors.New("DKIM check failed")
 
 func (v *MailValidator) validateDKIM(mailStr string) (*dkim.Verification, error) {
