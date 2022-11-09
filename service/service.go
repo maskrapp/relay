@@ -12,7 +12,7 @@ import (
 
 	"github.com/DusanKasan/parsemail"
 	"github.com/maskrapp/relay/mailer"
-	"github.com/maskrapp/relay/validator"
+	"github.com/maskrapp/relay/validation"
 	"github.com/sirupsen/logrus"
 	"github.com/thohui/smtpd"
 	"gorm.io/driver/postgres"
@@ -20,10 +20,11 @@ import (
 )
 
 type Relay struct {
-	smtpd  *smtpd.Server
-	logger *logrus.Logger
-	mailer *mailer.Mailer
-	db     *gorm.DB
+	smtpd     *smtpd.Server
+	logger    *logrus.Logger
+	mailer    *mailer.Mailer
+	db        *gorm.DB
+	validator *validation.MailValidator
 }
 
 func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, certificate, key string) *Relay {
@@ -54,6 +55,7 @@ func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, c
 		smtpdServer.TLSRequired = true
 		relay.logger.Info("Enabled TLS support")
 	}
+	relay.validator = validation.NewMailValidator(relay.logger)
 	relay.db = db
 	relay.smtpd = smtpdServer
 	relay.mailer = mailer.New(mailerToken)
@@ -79,18 +81,15 @@ func (r *Relay) handler() smtpd.Handler {
 		if !ok {
 			return errors.New("couldn't cast origin to TCP")
 		}
-
 		r.logger.Info("Incoming mail:", parsedMail)
-
 		if len(parsedMail.From) > 0 && parsedMail.From[0] != nil {
 			from = parsedMail.From[0].Address
 		}
 		domain := strings.Split(from, "@")[1]
-		spfResult, err := validator.ValidateSPF(ip.IP, domain, from)
+		err = r.validator.Validate(domain, from, string(data), ip.IP)
 		if err != nil {
-			logMessage := fmt.Sprintf("SPF check failed for mail: %v expected pass but got %v", from, spfResult)
-			r.logger.Error(logMessage)
-			return errors.New("SPF fail")
+			r.logger.Error(err)
+			return err
 		}
 		recipients := r.getValidRecipients(to)
 		if len(recipients) == 0 {
@@ -132,10 +131,14 @@ func (r *Relay) getValidRecipients(to []string) []string {
 // TODO: move this to different pkg
 func (r *Relay) isValidRecipient(to string) bool {
 	to = strings.ToLower(to)
-	r.logger.Info("validating: ", to)
-	if strings.Split(to, "@")[1] != "relay.maskr.app" {
+	split := strings.Split(to, "@")
+	if len(split) < 2 {
 		return false
 	}
+	if split[1] != "relay.maskr.app" {
+		return false
+	}
+
 	var result struct {
 		Found bool
 	}
