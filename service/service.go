@@ -71,7 +71,7 @@ func (r *Relay) Start() {
 }
 
 func (r *Relay) handler() smtpd.Handler {
-	return func(origin net.Addr, from string, to []string, data []byte) error {
+	return func(origin net.Addr, envelopeFrom string, to []string, data []byte) error {
 		parsedMail, err := parsemail.Parse(bytes.NewReader(data))
 		if err != nil {
 			r.logger.Error("error parsing incoming email:", err)
@@ -81,15 +81,31 @@ func (r *Relay) handler() smtpd.Handler {
 		if !ok {
 			return errors.New("couldn't cast origin to TCP")
 		}
-		r.logger.Info("Incoming mail:", parsedMail)
+		r.logger.Info("Incoming mail from:", parsedMail.From, envelopeFrom)
+		from := ""
 		if len(parsedMail.From) > 0 && parsedMail.From[0] != nil {
 			from = parsedMail.From[0].Address
 		}
-		domain := strings.Split(from, "@")[1]
-		err = r.validator.Validate(domain, from, string(data), ip.IP)
+		fromSplit := strings.Split(from, "@")
+		if len(fromSplit) != 2 {
+			return errors.New("invalid address")
+		}
+
+		envelopeSplit := strings.Split(from, "@")
+
+		if len(envelopeSplit) != 2 {
+			return errors.New("invalid address")
+		}
+
+		err, quarantine := r.validator.Validate(from, envelopeFrom, string(data), ip.IP)
 		if err != nil {
 			r.logger.Error(err)
 			return err
+		}
+		subject := parsedMail.Subject
+		//TODO: in the future, let users decide what they want to do with quarantined incoming mail; reject or allow.
+		if quarantine {
+			subject = "[SPAM] " + subject
 		}
 		recipients := r.getValidRecipients(to)
 		if len(recipients) == 0 {
@@ -100,7 +116,7 @@ func (r *Relay) handler() smtpd.Handler {
 		if len(to) == 1 {
 			forwardAddress = to[0]
 		}
-		err = r.mailer.ForwardMail(parsedMail.From[0].Name, forwardAddress, parsedMail.Subject, parsedMail.HTMLBody, parsedMail.TextBody, recipients)
+		err = r.mailer.ForwardMail(parsedMail.From[0].Name, forwardAddress, subject, parsedMail.HTMLBody, parsedMail.TextBody, recipients)
 		if err != nil {
 			r.logger.Error(err)
 			return err
@@ -132,7 +148,7 @@ func (r *Relay) getValidRecipients(to []string) []string {
 func (r *Relay) isValidRecipient(to string) bool {
 	to = strings.ToLower(to)
 	split := strings.Split(to, "@")
-	if len(split) < 2 {
+	if len(split) != 2 {
 		return false
 	}
 	if split[1] != "relay.maskr.app" {

@@ -2,14 +2,15 @@ package validation
 
 import (
 	"errors"
-	"fmt"
 	"net"
 	"strings"
 	"sync"
 
 	"blitiri.com.ar/go/spf"
 	"github.com/emersion/go-msgauth/dkim"
+	"github.com/emersion/go-msgauth/dmarc"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/net/publicsuffix"
 )
 
 type MailValidator struct {
@@ -20,32 +21,82 @@ func NewMailValidator(logger *logrus.Logger) *MailValidator {
 	return &MailValidator{logger: logger}
 }
 
-// TODO: perhaps implement DMARC?
-func (v *MailValidator) Validate(domain, sender, mailStr string, ip net.IP) error {
+// https://knowledge.ondmarc.redsift.com/en/articles/1739840-all-you-need-to-know-about-spf-dkim-and-dmarc
+
+// Validate validates an incoming email by using SPF, DKIM and DMARC.
+func (v *MailValidator) Validate(headerFrom, envelopeFrom, mailStr string, ip net.IP) (error, bool) {
+
 	var spfResult spf.Result = spf.None
 	var dkimResult *dkim.Verification = nil
 	var dkimErr error = nil
+	var dmarcResult *dmarc.Record = nil
+	var dmarcErr error = nil
+	s := strings.Split(envelopeFrom, "@")
+	if len(s) != 2 {
+		return errors.New("invalid envelope from address"), false
+	}
+	envelopeFromDomain := s[1]
+
+	s2 := strings.Split(headerFrom, "@")
+	if len(s2) != 2 {
+		return errors.New("invalid from address"), false
+	}
+
+	headerFromDomain := s2[1]
 
 	wg := sync.WaitGroup{}
 
-	wg.Add(2)
+	wg.Add(3)
 	go func() {
-		spfResult, _ = v.validateSPF(domain, sender, ip)
+		spfResult, _ = v.validateSPF(envelopeFromDomain, envelopeFrom, ip)
 		wg.Done()
 	}()
 	go func() {
 		dkimResult, dkimErr = v.validateDKIM(mailStr)
 		wg.Done()
 	}()
+	go func() {
+		dmarcResult, dmarcErr = dmarc.Lookup(headerFromDomain)
+		wg.Done()
+	}()
 	wg.Wait()
 
-	// for now, only one of the two checks has to pass in order for the entire thing to succeed. TODO: look into making this better.
-	if spfResult == spf.Pass || dkimErr == nil {
-		return nil
+	spfPass := spfResult == spf.Pass
+	dkimPass := dkimErr != nil
+
+	if !spfPass && !dkimPass {
+		return errors.New("both SPF and DKIM failed"), false
+	}
+	// when there's a DMARC error both checks have to pass. maybe quarantine this instead?
+	if dmarcErr != nil && (!spfPass || !dkimPass) {
+		return errors.New("DMARC fail (2)"), false
 	}
 
-	message := fmt.Sprintf("mail from %v did not meet spf and dkim requirements. spf: %v dkim: %v dkim err %v", sender, spfResult, dkimResult, dkimErr)
-	return errors.New(message)
+	dkimAligned := v.isAligned(headerFromDomain, dkimResult.Domain, dmarcResult.DKIMAlignment)
+	spfAligned := v.isAligned(headerFromDomain, envelopeFromDomain, dmarcResult.SPFAlignment)
+
+	/*
+
+		If SPF PASSED and ALIGNED with the “From” domain = DMARC PASS, or
+		If DKIM PASSED and ALIGNED with the “From” domain = DMARC PASS
+
+		If both SPF and DKIM FAILED = DMARC FAIL
+	*/
+
+	if (spfAligned && spfPass) || (dkimAligned && dkimPass) {
+		return nil, false
+	}
+
+	switch dmarcResult.Policy {
+	case dmarc.PolicyNone:
+		// for now, we are quarantining this.
+		return nil, true
+	case dmarc.PolicyQuarantine:
+		return nil, true
+	case dmarc.PolicyReject:
+		return errors.New("DMARC reject"), false
+	}
+	return nil, false
 }
 
 var errNoDKIMRecord = errors.New("domain does not have any DKIM DNS records")
@@ -68,6 +119,25 @@ func (v *MailValidator) validateDKIM(mailStr string) (*dkim.Verification, error)
 	return nil, errInvalidRecord
 }
 
-func (v *MailValidator) validateSPF(domain, sender string, ip net.IP) (spf.Result, error) {
-	return spf.CheckHostWithSender(ip, domain, sender)
+func (v *MailValidator) validateSPF(domain, mailFrom string, ip net.IP) (spf.Result, error) {
+	return spf.CheckHostWithSender(ip, domain, mailFrom)
+}
+
+// credit: maddy
+func (v *MailValidator) isAligned(fromDomain, authDomain string, mode dmarc.AlignmentMode) bool {
+
+	if mode == dmarc.AlignmentStrict {
+		return strings.EqualFold(fromDomain, authDomain)
+	}
+
+	orgDomainFrom, err := publicsuffix.EffectiveTLDPlusOne(fromDomain)
+	if err != nil {
+		return false
+	}
+	authDomainFrom, err := publicsuffix.EffectiveTLDPlusOne(authDomain)
+	if err != nil {
+		return false
+	}
+
+	return strings.EqualFold(orgDomainFrom, authDomainFrom)
 }
