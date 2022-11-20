@@ -23,17 +23,14 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa // indirect
-	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
-	golang.org/x/net v0.2.0 // indirect
 	golang.org/x/sys v0.2.0 // indirect
 	golang.org/x/text v0.4.0 // indirect
-	golang.org/x/tools v0.1.12 // indirect
 )
 
 require (
 	github.com/emersion/go-msgauth v0.6.6
-	github.com/miekg/dns v1.1.50
 	github.com/sirupsen/logrus v1.9.0
 	github.com/thohui/smtpd v0.0.0-20221105041907-baee0ceb1cfb
+	golang.org/x/net v0.2.0
 	gorm.io/driver/postgres v1.4.5
 )
