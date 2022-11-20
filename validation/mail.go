@@ -112,7 +112,7 @@ func (v *MailValidator) validateDKIM(mailStr string) (*dkim.Verification, error)
 	}
 	for _, v := range verifications {
 		if v.Err == nil {
-			logrus.Info("dkim check succeeded for: ", v)
+			logrus.Debug("dkim check succeeded for: ", v)
 			return v, nil
 		}
 	}
