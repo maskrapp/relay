@@ -14,11 +14,10 @@ import (
 )
 
 type MailValidator struct {
-	logger *logrus.Logger
 }
 
-func NewMailValidator(logger *logrus.Logger) *MailValidator {
-	return &MailValidator{logger: logger}
+func NewMailValidator() *MailValidator {
+	return &MailValidator{}
 }
 
 // https://knowledge.ondmarc.redsift.com/en/articles/1739840-all-you-need-to-know-about-spf-dkim-and-dmarc
@@ -65,13 +64,13 @@ func (v *MailValidator) Validate(headerFrom, envelopeFrom, mailStr string, ip ne
 	dkimPass := dkimErr != nil
 
 	if !spfPass && !dkimPass {
-		v.logger.Debugf("both SPF and DKIM failed for address: %v(%v)", envelopeFrom, headerFrom)
+		logrus.Debugf("both SPF and DKIM failed for address: %v(%v)", envelopeFrom, headerFrom)
 
 		return errors.New("both SPF and DKIM failed"), false
 	}
 	// when there's a DMARC error both checks have to pass. maybe quarantine this instead?
 	if dmarcErr != nil && (!spfPass || !dkimPass) {
-		v.logger.Debugf("dmarc error: %v for address: %v(%v), spf pass: %v dkim pass: %v", envelopeFrom, headerFrom, spfPass, dkimPass)
+		logrus.Debugf("dmarc error: %v for address: %v(%v), spf pass: %v dkim pass: %v", envelopeFrom, headerFrom, spfPass, dkimPass)
 		return errors.New("DMARC fail (2)"), false
 	}
 
@@ -87,7 +86,7 @@ func (v *MailValidator) Validate(headerFrom, envelopeFrom, mailStr string, ip ne
 	*/
 
 	if (spfAligned && spfPass) || (dkimAligned && dkimPass) {
-		v.logger.Debugf("DMARC pass for address: %v(%v)", envelopeFrom, headerFrom)
+		logrus.Debugf("DMARC pass for address: %v(%v)", envelopeFrom, headerFrom)
 		return nil, false
 	}
 
