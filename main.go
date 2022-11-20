@@ -7,6 +7,7 @@ import (
 
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/maskrapp/relay/service"
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
@@ -18,6 +19,17 @@ func main() {
 	production := os.Getenv("PRODUCTION") == "true"
 	certificate := os.Getenv("CERTIFICATE")
 	privateKey := os.Getenv("PRIVATE_KEY")
+
+	lvl, ok := os.LookupEnv("LOG_LEVEL")
+	if !ok {
+		lvl = "debug"
+	}
+	ll, err := logrus.ParseLevel(lvl)
+	if err != nil {
+		ll = logrus.DebugLevel
+	}
+	logrus.SetLevel(ll)
+
 	relay := service.New(production, dbUser, dbPassword, dbHost, dbDatabase, token, certificate, privateKey)
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
