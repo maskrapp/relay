@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DusanKasan/parsemail"
+	"github.com/maskrapp/relay/database"
 	"github.com/maskrapp/relay/mailer"
 	"github.com/maskrapp/relay/validation"
 	"github.com/sirupsen/logrus"
@@ -41,8 +42,7 @@ func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, c
 			return false, errors.New("Unauthorized")
 		},
 		HandlerRcpt: func(remoteAddr net.Addr, from, to string) bool {
-			//TODO: validate from.
-			return relay.isValidRecipient(to)
+			return database.IsValidRecipient(db, to)
 		},
 	}
 	if production {
@@ -106,7 +106,7 @@ func (r *Relay) handler() smtpd.Handler {
 		if quarantine {
 			subject = "[SPAM] " + subject
 		}
-		recipients := r.getValidRecipients(to)
+		recipients := database.GetValidRecipients(r.db, to)
 		if len(recipients) == 0 {
 			logrus.Debug("found no valid recipients for ", to)
 			return nil
@@ -126,42 +126,6 @@ func (r *Relay) handler() smtpd.Handler {
 }
 
 // TODO: move this to different pkg
-func (r *Relay) getValidRecipients(to []string) []string {
-	recipients := make([]string, 0)
-	for _, v := range to {
-		v = strings.ToLower(v)
-		//TODO: support more domains in the future
-		if strings.Split(v, "@")[1] == "relay.maskr.app" {
-			result, err := r.getMask(v)
-			if err == nil {
-				if result.Enabled {
-					recipients = append(recipients, result.Email)
-				}
-			}
-		}
-	}
-	return recipients
-}
-
-// TODO: move this to different pkg
-func (r *Relay) isValidRecipient(to string) bool {
-	to = strings.ToLower(to)
-	split := strings.Split(to, "@")
-	if len(split) != 2 {
-		return false
-	}
-	if split[1] != "relay.maskr.app" {
-		return false
-	}
-
-	var result struct {
-		Found bool
-	}
-
-	r.db.Raw("SELECT EXISTS(SELECT 1 FROM masks WHERE mask = ?) AS found",
-		to).Scan(&result)
-	return result.Found
-}
 
 func (r *Relay) Shutdown() {
 	logrus.Info("Gracefully shutting down...")
@@ -171,16 +135,4 @@ func (r *Relay) Shutdown() {
 	if err != nil {
 		logrus.Error(err)
 	}
-}
-
-type record struct {
-	Mask    string `json:"mask"`
-	Email   string `json:"email"`
-	Enabled bool   `json:"enabled"`
-}
-
-func (r *Relay) getMask(mask string) (*record, error) {
-	record := &record{}
-	err := r.db.Table("masks").Select("masks.mask, masks.enabled, emails.email").Joins("inner join emails on emails.id = masks.forward_to").Where("masks.mask = ?", mask).First(&record).Error
-	return record, err
 }
