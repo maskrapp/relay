@@ -7,7 +7,7 @@ require blitiri.com.ar/go/spf v1.5.1
 require (
 	github.com/DusanKasan/parsemail v1.2.0
 	github.com/joho/godotenv v1.4.0
-	gorm.io/gorm v1.24.1-0.20221019064659-5dd2bb482755
+	gorm.io/gorm v1.24.1
 )
 
 require (

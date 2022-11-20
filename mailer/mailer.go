@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/maskrapp/relay/database"
 )
 
 type Mailer struct {
@@ -28,12 +30,12 @@ func New(token string) *Mailer {
 		}}
 }
 
-func (m *Mailer) transformRecipients(to []string) []map[string]interface{} {
+func (m *Mailer) transformRecipients(to []database.Recipient) []map[string]interface{} {
 	data := make([]map[string]interface{}, 0)
 	for _, v := range to {
 		entry := map[string]interface{}{
 			"email_address": map[string]interface{}{
-				"address": v,
+				"address": v.Email,
 			},
 		}
 		data = append(data, entry)
@@ -41,7 +43,7 @@ func (m *Mailer) transformRecipients(to []string) []map[string]interface{} {
 	return data
 }
 
-func (m *Mailer) ForwardMail(sender, forwardAddress, subject, htmlBody, textBody string, recipients []string) error {
+func (m *Mailer) ForwardMail(sender, forwardAddress, subject, htmlBody, textBody string, recipients []database.Recipient) error {
 	body := map[string]interface{}{
 		"bounce_address": "bounce@bounce.maskr.app",
 		"htmlbody":       htmlBody,

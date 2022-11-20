@@ -38,9 +38,6 @@ func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, c
 	smtpdServer := &smtpd.Server{
 		Handler: relay.handler(),
 		Addr:    "0.0.0.0:25",
-		AuthHandler: func(remoteAddr net.Addr, mechanism string, username, password, shared []byte) (bool, error) {
-			return false, errors.New("Unauthorized")
-		},
 		HandlerRcpt: func(remoteAddr net.Addr, from, to string) bool {
 			return database.IsValidRecipient(db, to)
 		},
@@ -65,7 +62,7 @@ func (r *Relay) Start() {
 	logrus.Info("Starting service...")
 	err := r.smtpd.ListenAndServe()
 	if err != nil {
-		logrus.Error("SMTPD error", err)
+		logrus.Error("SMTPD error: ", err)
 	}
 }
 
@@ -118,14 +115,30 @@ func (r *Relay) handler() smtpd.Handler {
 		err = r.mailer.ForwardMail(parsedMail.From[0].Name, forwardAddress, subject, parsedMail.HTMLBody, parsedMail.TextBody, recipients)
 		if err != nil {
 			logrus.Error(err)
+			go func() {
+				// TODO: do this in a single query
+				for _, v := range recipients {
+					innerErr := database.IncrementReceivedCount(r.db, v.Mask)
+					if innerErr != nil {
+						logrus.Error("DB error(IncrementReceivedCount): ", innerErr)
+					}
+				}
+			}()
 			return err
 		}
-		logrus.Debug("Forwarded mail to ", recipients, " from address ", forwardAddress)
+		go func() {
+			for _, v := range recipients {
+				// TODO: do this in a single query
+				innerErr := database.IncrementForwardedCount(r.db, v.Mask)
+				if innerErr != nil {
+					logrus.Error("DB error(IncrementForwardedCount): ", innerErr)
+				}
+			}
+		}()
+		logrus.Debugf("Forwarded mail to: %v from address: %v", recipients, forwardAddress)
 		return nil
 	}
 }
-
-// TODO: move this to different pkg
 
 func (r *Relay) Shutdown() {
 	logrus.Info("Gracefully shutting down...")
