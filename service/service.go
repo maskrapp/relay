@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DusanKasan/parsemail"
+	"github.com/maskrapp/common/models"
 	"github.com/maskrapp/relay/database"
 	"github.com/maskrapp/relay/mailer"
 	"github.com/maskrapp/relay/validation"
@@ -21,10 +22,11 @@ import (
 )
 
 type Relay struct {
-	smtpd     *smtpd.Server
-	mailer    *mailer.Mailer
-	db        *gorm.DB
-	validator *validation.MailValidator
+	smtpd            *smtpd.Server
+	mailer           *mailer.Mailer
+	db               *gorm.DB
+	validator        *validation.MailValidator
+	availableDomains []models.Domain
 }
 
 func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, certificate, key string) *Relay {
@@ -39,7 +41,8 @@ func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, c
 		Handler: relay.handler(),
 		Addr:    "0.0.0.0:25",
 		HandlerRcpt: func(remoteAddr net.Addr, from, to string) bool {
-			return database.IsValidRecipient(db, to)
+			logrus.Debug("Checking validRecipie")
+			return database.IsValidRecipient(db, to, relay.availableDomains)
 		},
 	}
 	if production {
@@ -55,6 +58,14 @@ func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, c
 	relay.db = db
 	relay.smtpd = smtpdServer
 	relay.mailer = mailer.New(mailerToken)
+
+	logrus.Info("Getting available domains...")
+	domains, err := database.GetAvailableDomains(db)
+	if err != nil {
+		logrus.Error("DB error(GetAvailableDomains): ", err)
+	}
+	logrus.Info("Available domains: ", domains)
+	relay.availableDomains = domains
 	return relay
 }
 
@@ -103,7 +114,7 @@ func (r *Relay) handler() smtpd.Handler {
 		if quarantine {
 			subject = "[SPAM] " + subject
 		}
-		recipients := database.GetValidRecipients(r.db, to)
+		recipients := database.GetValidRecipients(r.db, to, r.availableDomains)
 		if len(recipients) == 0 {
 			logrus.Debug("found no valid recipients for ", to)
 			return nil
