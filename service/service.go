@@ -79,6 +79,9 @@ func (r *Relay) Start() {
 
 func (r *Relay) handler() smtpd.Handler {
 	return func(data smtpd.HandlerData) error {
+    if data.RemoteHost == "unknown" {
+      return errors.New("reverse dns lookup failed")
+    }
 		parsedMail, err := parsemail.Parse(bytes.NewReader(data.Data))
 		if err != nil {
 			logrus.Error("error parsing incoming email:", err)
