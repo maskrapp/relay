@@ -78,17 +78,17 @@ func (r *Relay) Start() {
 }
 
 func (r *Relay) handler() smtpd.Handler {
-	return func(origin net.Addr, envelopeFrom string, to []string, data []byte) error {
-		parsedMail, err := parsemail.Parse(bytes.NewReader(data))
+	return func(data smtpd.HandlerData) error {
+		parsedMail, err := parsemail.Parse(bytes.NewReader(data.Data))
 		if err != nil {
 			logrus.Error("error parsing incoming email:", err)
 			return err
 		}
-		ip, ok := origin.(*net.TCPAddr)
+		ip, ok := data.RemoteAddr.(*net.TCPAddr)
 		if !ok {
 			return errors.New("couldn't cast origin to TCP")
 		}
-		logrus.Debug("Incoming mail from:", parsedMail.From, envelopeFrom)
+		logrus.Debug("Incoming mail from:", parsedMail.From, data.From)
 		from := ""
 		if len(parsedMail.From) > 0 && parsedMail.From[0] != nil {
 			from = parsedMail.From[0].Address
@@ -104,7 +104,7 @@ func (r *Relay) handler() smtpd.Handler {
 			return errors.New("invalid address")
 		}
 
-		err, quarantine := r.validator.Validate(from, envelopeFrom, string(data), ip.IP)
+		err, quarantine := r.validator.Validate(from, data.From, string(data.Data), ip.IP)
 		if err != nil {
 			logrus.Error(err)
 			return err
@@ -114,14 +114,14 @@ func (r *Relay) handler() smtpd.Handler {
 		if quarantine {
 			subject = "[SPAM] " + subject
 		}
-		recipients := database.GetValidRecipients(r.db, to, r.availableDomains)
+		recipients := database.GetValidRecipients(r.db, data.To, r.availableDomains)
 		if len(recipients) == 0 {
-			logrus.Debug("found no valid recipients for ", to)
+			logrus.Debug("found no valid recipients for ", data.To)
 			return nil
 		}
 		forwardAddress := "no-reply@maskr.app"
-		if len(to) == 1 {
-			forwardAddress = to[0]
+		if len(data.To) == 1 {
+			forwardAddress = data.To[0]
 		}
 		err = r.mailer.ForwardMail(parsedMail.From[0].Name, forwardAddress, subject, parsedMail.HTMLBody, parsedMail.TextBody, recipients)
 		if err != nil {
