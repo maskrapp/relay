@@ -31,6 +31,7 @@ func (v *MailValidator) Validate(headerFrom, envelopeFrom, mailStr string, ip ne
 	var dmarcResult *dmarc.Record = nil
 	var dmarcErr error = nil
 	s := strings.Split(envelopeFrom, "@")
+
 	if len(s) != 2 {
 		return errors.New("invalid envelope from address"), false
 	}
@@ -60,6 +61,7 @@ func (v *MailValidator) Validate(headerFrom, envelopeFrom, mailStr string, ip ne
 	}()
 	wg.Wait()
 
+	logrus.Info("SPF RESULT", spfResult)
 	spfPass := spfResult == spf.Pass
 	dkimPass := dkimErr != nil
 
@@ -70,7 +72,7 @@ func (v *MailValidator) Validate(headerFrom, envelopeFrom, mailStr string, ip ne
 	}
 	// when there's a DMARC error both checks have to pass. maybe quarantine this instead?
 	if dmarcErr != nil && (!spfPass || !dkimPass) {
-		logrus.Debugf("dmarc error: %v for address: %v(%v), spf pass: %v dkim pass: %v", envelopeFrom, headerFrom, spfPass, dkimPass)
+		logrus.Debugf("dmarc error: %v for address: %v(%v), spf pass: %v dkim pass: %v", dmarcErr, envelopeFrom, headerFrom, spfPass, dkimPass)
 		return errors.New("DMARC fail (2)"), false
 	}
 

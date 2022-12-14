@@ -5,68 +5,49 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net"
 	"strings"
 	"time"
 
 	"github.com/DusanKasan/parsemail"
 	"github.com/maskrapp/common/models"
-	"github.com/maskrapp/relay/database"
-	"github.com/maskrapp/relay/mailer"
-	"github.com/maskrapp/relay/validation"
+	"github.com/maskrapp/relay/internal/database"
+	"github.com/maskrapp/relay/internal/global"
 	"github.com/sirupsen/logrus"
 	"github.com/thohui/smtpd"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 type Relay struct {
-	smtpd            *smtpd.Server
-	mailer           *mailer.Mailer
-	db               *gorm.DB
-	validator        *validation.MailValidator
-	availableDomains []models.Domain
+	smtpd *smtpd.Server
 }
 
-func New(production bool, dbUser, dbPassword, dbHost, dbDatabase, mailerToken, certificate, key string) *Relay {
-	relay := &Relay{}
-	uri := fmt.Sprintf("postgres://%v:%v@%v/%v", dbUser, dbPassword, dbHost, dbDatabase)
-	db, err := gorm.Open(postgres.Open(uri), &gorm.Config{})
+func New(ctx global.Context) *Relay {
+
+	domains, err := database.GetAvailableDomains(ctx.Instances().Gorm)
 	if err != nil {
-		logrus.Panic(err)
+		logrus.Error("DB error(GetAvailableDomains): ", err)
 	}
-	logrus.Info("Succesfully connected to DB")
+
 	smtpdServer := &smtpd.Server{
-		Handler: relay.handler(),
-		Addr:    "0.0.0.0:25",
+		Addr: "0.0.0.0:25",
 		HandlerRcpt: func(remoteAddr net.Addr, from, to string) bool {
-			logrus.Debug("Checking validRecipie")
-			return database.IsValidRecipient(db, to, relay.availableDomains)
+			return database.IsValidRecipient(ctx.Instances().Gorm, to, domains)
 		},
+		Handler: handler(ctx, domains),
 	}
-	if production {
-		cert, err := tls.X509KeyPair([]byte(certificate), []byte(key))
+
+	if ctx.Config().Production {
+		cert, err := tls.X509KeyPair([]byte(ctx.Config().TLS.CertificatePath), []byte(ctx.Config().TLS.PrivateKeyPath))
 		if err != nil {
 			logrus.Panic(err)
 		}
 		smtpdServer.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
 		smtpdServer.TLSRequired = true
-		logrus.Info("Enabled TLS support")
+		logrus.Info("Enabled TLS")
 	}
-	relay.validator = validation.NewMailValidator()
-	relay.db = db
-	relay.smtpd = smtpdServer
-	relay.mailer = mailer.New(mailerToken)
 
-	logrus.Info("Getting available domains...")
-	domains, err := database.GetAvailableDomains(db)
-	if err != nil {
-		logrus.Error("DB error(GetAvailableDomains): ", err)
-	}
 	logrus.Info("Available domains: ", domains)
-	relay.availableDomains = domains
-	return relay
+	return &Relay{smtpdServer}
 }
 
 func (r *Relay) Start() {
@@ -77,11 +58,21 @@ func (r *Relay) Start() {
 	}
 }
 
-func (r *Relay) handler() smtpd.Handler {
+func (r *Relay) Shutdown() {
+	logrus.Info("Gracefully shutting down...")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	err := r.smtpd.Shutdown(ctx)
+	if err != nil {
+		logrus.Error(err)
+	}
+}
+
+func handler(ctx global.Context, availableDomains []models.Domain) smtpd.Handler {
 	return func(data smtpd.HandlerData) error {
-    if data.RemoteHost == "unknown" {
-      return errors.New("reverse dns lookup failed")
-    }
+		if data.RemoteHost == "unknown" {
+			return errors.New("reverse dns lookup failed")
+		}
 		parsedMail, err := parsemail.Parse(bytes.NewReader(data.Data))
 		if err != nil {
 			logrus.Error("error parsing incoming email:", err)
@@ -89,13 +80,15 @@ func (r *Relay) handler() smtpd.Handler {
 		}
 		ip, ok := data.RemoteAddr.(*net.TCPAddr)
 		if !ok {
-			return errors.New("couldn't cast origin to TCP")
+			return errors.New("error casting origin to net.TCPAddr")
 		}
 		logrus.Debug("Incoming mail from:", parsedMail.From, data.From)
+
 		from := ""
 		if len(parsedMail.From) > 0 && parsedMail.From[0] != nil {
 			from = parsedMail.From[0].Address
 		}
+
 		fromSplit := strings.Split(from, "@")
 		if len(fromSplit) != 2 {
 			return errors.New("invalid address")
@@ -107,7 +100,7 @@ func (r *Relay) handler() smtpd.Handler {
 			return errors.New("invalid address")
 		}
 
-		err, quarantine := r.validator.Validate(from, data.From, string(data.Data), ip.IP)
+		err, quarantine := ctx.Instances().MailValidator.Validate(from, data.From, string(data.Data), ip.IP)
 		if err != nil {
 			logrus.Error(err)
 			return err
@@ -117,7 +110,8 @@ func (r *Relay) handler() smtpd.Handler {
 		if quarantine {
 			subject = "[SPAM] " + subject
 		}
-		recipients := database.GetValidRecipients(r.db, data.To, r.availableDomains)
+		db := ctx.Instances().Gorm
+		recipients := database.GetValidRecipients(db, data.To, availableDomains)
 		if len(recipients) == 0 {
 			logrus.Debug("found no valid recipients for ", data.To)
 			return nil
@@ -126,13 +120,13 @@ func (r *Relay) handler() smtpd.Handler {
 		if len(data.To) == 1 {
 			forwardAddress = data.To[0]
 		}
-		err = r.mailer.ForwardMail(parsedMail.From[0].Name, forwardAddress, subject, parsedMail.HTMLBody, parsedMail.TextBody, recipients)
+		err = ctx.Instances().Mailer.ForwardMail(parsedMail.From[0].Name, forwardAddress, subject, parsedMail.HTMLBody, parsedMail.TextBody, recipients)
 		if err != nil {
 			logrus.Error(err)
 			go func() {
 				// TODO: do this in a single query
 				for _, v := range recipients {
-					innerErr := database.IncrementReceivedCount(r.db, v.Mask)
+					innerErr := database.IncrementReceivedCount(db, v.Mask)
 					if innerErr != nil {
 						logrus.Error("DB error(IncrementReceivedCount): ", innerErr)
 					}
@@ -143,7 +137,7 @@ func (r *Relay) handler() smtpd.Handler {
 		go func() {
 			for _, v := range recipients {
 				// TODO: do this in a single query
-				innerErr := database.IncrementForwardedCount(r.db, v.Mask)
+				innerErr := database.IncrementForwardedCount(db, v.Mask)
 				if innerErr != nil {
 					logrus.Error("DB error(IncrementForwardedCount): ", innerErr)
 				}
@@ -151,15 +145,5 @@ func (r *Relay) handler() smtpd.Handler {
 		}()
 		logrus.Debugf("Forwarded mail to: %v from address: %v", recipients, forwardAddress)
 		return nil
-	}
-}
-
-func (r *Relay) Shutdown() {
-	logrus.Info("Gracefully shutting down...")
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
-	err := r.smtpd.Shutdown(ctx)
-	if err != nil {
-		logrus.Error(err)
 	}
 }

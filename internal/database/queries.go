@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/maskrapp/common/models"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -21,8 +22,11 @@ func IsValidRecipient(db *gorm.DB, to string, domains []models.Domain) bool {
 	var result struct {
 		Found bool
 	}
-	db.Raw("SELECT EXISTS(SELECT 1 FROM masks WHERE mask = ?) AS found",
-		to).Scan(&result)
+  err := db.Raw("SELECT EXISTS(SELECT 1 FROM masks WHERE mask = ?) AS found",
+		to).Scan(&result).Error
+    if err != nil {
+      logrus.Error("db error(isValidRecipient): ",err)
+    }
 	return result.Found
 }
 

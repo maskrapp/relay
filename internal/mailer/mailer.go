@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/maskrapp/relay/database"
+	"github.com/maskrapp/relay/internal/database"
 )
 
 type Mailer struct {
