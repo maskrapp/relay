@@ -6,14 +6,12 @@ import (
 
 	"github.com/maskrapp/relay/internal/config"
 	"github.com/maskrapp/relay/internal/mailer"
-	"github.com/maskrapp/relay/internal/validation"
 	"gorm.io/gorm"
 )
 
 type Instances struct {
-	Gorm          *gorm.DB
-	MailValidator *validation.MailValidator
-	Mailer        *mailer.Mailer
+	Gorm   *gorm.DB
+	Mailer *mailer.Mailer
 }
 
 type Context interface {

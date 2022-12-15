@@ -11,8 +11,10 @@ import (
 
 	"github.com/DusanKasan/parsemail"
 	"github.com/maskrapp/common/models"
+	"github.com/maskrapp/relay/internal/check"
 	"github.com/maskrapp/relay/internal/database"
 	"github.com/maskrapp/relay/internal/global"
+	"github.com/maskrapp/relay/internal/validation"
 	"github.com/sirupsen/logrus"
 	"github.com/thohui/smtpd"
 )
@@ -22,7 +24,6 @@ type Relay struct {
 }
 
 func New(ctx global.Context) *Relay {
-
 	domains, err := database.GetAvailableDomains(ctx.Instances().Gorm)
 	if err != nil {
 		logrus.Error("DB error(GetAvailableDomains): ", err)
@@ -99,15 +100,21 @@ func handler(ctx global.Context, availableDomains []models.Domain) smtpd.Handler
 		if len(envelopeSplit) != 2 {
 			return errors.New("invalid address")
 		}
-
-		err, quarantine := ctx.Instances().MailValidator.Validate(from, data.From, string(data.Data), ip.IP)
-		if err != nil {
-			logrus.Error(err)
-			return err
+		validator := validation.NewValidator()
+		result := validator.RunChecks(ctx, check.CheckValues{
+			EnvelopeFrom: data.From,
+			HeaderFrom:   from,
+			Helo:         data.Helo,
+			MailData:     string(data.Data),
+			Ip:           ip.IP,
+		})
+		if result.Reject {
+			logrus.Infof("rejecting incoming mail for reason %v", result.Reason)
+			return errors.New(result.Reason)
 		}
 		subject := parsedMail.Subject
 		//TODO: in the future, let users decide what they want to do with quarantined incoming mail; reject or allow.
-		if quarantine {
+		if result.Quarantine {
 			subject = "[SPAM] " + subject
 		}
 		db := ctx.Instances().Gorm

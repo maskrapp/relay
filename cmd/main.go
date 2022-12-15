@@ -12,7 +12,6 @@ import (
 	"github.com/maskrapp/relay/internal/global"
 	"github.com/maskrapp/relay/internal/mailer"
 	"github.com/maskrapp/relay/internal/service"
-	"github.com/maskrapp/relay/internal/validation"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -36,9 +35,8 @@ func main() {
 	}
 
 	instances := &global.Instances{
-		Gorm:          db,
-		MailValidator: validation.NewMailValidator(),
-		Mailer:        mailer.New(cfg.ZeptoMail.EmailToken),
+		Gorm:   db,
+		Mailer: mailer.New(cfg.ZeptoMail.EmailToken),
 	}
 
 	globalContext := global.NewContext(context.Background(), instances, cfg)
