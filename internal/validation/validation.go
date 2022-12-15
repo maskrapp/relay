@@ -19,23 +19,26 @@ type CheckResponse struct {
 }
 
 var statelessChecks = map[string]check.Check{
-	"spf":  checks.SpfCheck{},
-	"dkim": checks.DkimCheck{},
-  "reverse_dns": checks.ReverseDnsCheck{},
+	"spf":         checks.SpfCheck{},
+	"dkim":        checks.DkimCheck{},
+	"reverse_dns": checks.ReverseDnsCheck{},
 }
 
 func NewValidator() *MailValidator {
 	return &MailValidator{statelessChecks}
 }
 
-func (v *MailValidator) RunChecks(ctx context.Context, values check.CheckValues) CheckResponse {
+func (v *MailValidator) RunChecks(c context.Context, values check.CheckValues) CheckResponse {
 	var responses = make(map[string]check.CheckResult)
 	var state = make(map[string]any)
 	var quarantine bool
+	ctx, cancel := context.WithCancel(c)
+	defer cancel()
 	for k, v := range v.checks {
 		response := v.Validate(ctx, values)
 
 		if response.Reject {
+			cancel()
 			return CheckResponse{
 				Reject: true,
 				Reason: response.Message,
