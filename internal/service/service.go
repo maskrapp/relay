@@ -71,9 +71,6 @@ func (r *Relay) Shutdown() {
 
 func handler(ctx global.Context, availableDomains []models.Domain) smtpd.Handler {
 	return func(data smtpd.HandlerData) error {
-		if data.RemoteHost == "unknown" {
-			return errors.New("reverse dns lookup failed")
-		}
 		parsedMail, err := parsemail.Parse(bytes.NewReader(data.Data))
 		if err != nil {
 			logrus.Error("error parsing incoming email:", err)
@@ -109,7 +106,7 @@ func handler(ctx global.Context, availableDomains []models.Domain) smtpd.Handler
 			Ip:           ip.IP,
 		})
 		if result.Reject {
-			logrus.Infof("rejecting incoming mail for reason %v", result.Reason)
+      logrus.Infof("rejecting incoming mail for reason: %v", result.Reason)
 			return errors.New(result.Reason)
 		}
 		subject := parsedMail.Subject

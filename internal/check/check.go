@@ -18,6 +18,7 @@ type CheckValues struct {
 	EnvelopeFrom string
 	Helo         string
 	MailData     string
+	RemoteHost   string
 	Ip           net.IP
 }
 

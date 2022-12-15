@@ -12,6 +12,7 @@ require (
 
 require (
 	github.com/armon/go-proxyproto v0.0.0-20210323213023-7e956b284f0a // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgconn v1.13.0 // indirect
 	github.com/jackc/pgio v1.0.0 // indirect
@@ -22,16 +23,18 @@ require (
 	github.com/jackc/pgx/v4 v4.17.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
-	github.com/stretchr/testify v1.8.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	golang.org/x/crypto v0.4.0 // indirect
 	golang.org/x/sys v0.3.0 // indirect
 	golang.org/x/text v0.5.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 require (
 	github.com/emersion/go-msgauth v0.6.6
 	github.com/maskrapp/common v0.0.0-20221202171004-7ce6afc4fce8
 	github.com/sirupsen/logrus v1.9.0
+	github.com/stretchr/testify v1.8.1
 	github.com/thohui/smtpd v0.0.0-20221211031649-f00d8698de98
 	golang.org/x/net v0.4.0
 	gorm.io/driver/postgres v1.4.5
