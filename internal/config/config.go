@@ -8,7 +8,7 @@ import (
 
 type Config struct {
 	Database struct {
-		Host string
+		Host     string
 		Username string
 		Password string
 		Database string
@@ -26,7 +26,8 @@ type Config struct {
 	Logger struct {
 		LogLevel string
 	}
-	Production bool
+	Production    bool
+	SpamhausToken string
 }
 
 func New() *Config {
@@ -47,6 +48,7 @@ func New() *Config {
 	cfg.Logger.LogLevel = getOrDefault("LOG_LEVEL", "debug")
 
 	cfg.Production = getOrDefault("PRODUCTION", "true") == "true"
+  cfg.SpamhausToken = os.Getenv("SPAMHAUS_TOKEN")
 
 	return cfg
 }

@@ -48,7 +48,8 @@ func New(ctx global.Context) *Relay {
 	}
 
 	logrus.Info("Available domains: ", domains)
-	return &Relay{smtpdServer}
+
+	return &Relay{smtpd: smtpdServer}
 }
 
 func (r *Relay) Start() {
@@ -70,6 +71,7 @@ func (r *Relay) Shutdown() {
 }
 
 func handler(ctx global.Context, availableDomains []models.Domain) smtpd.Handler {
+	validator := validation.NewValidator(ctx)
 	return func(data smtpd.HandlerData) error {
 		parsedMail, err := parsemail.Parse(bytes.NewReader(data.Data))
 		if err != nil {
@@ -97,16 +99,15 @@ func handler(ctx global.Context, availableDomains []models.Domain) smtpd.Handler
 		if len(envelopeSplit) != 2 {
 			return errors.New("invalid address")
 		}
-		validator := validation.NewValidator()
 		result := validator.RunChecks(ctx, check.CheckValues{
-			EnvelopeFrom: data.From,
+			EnvelopeFrom: data.From, //FIXME: this can be empty sometimes???
 			HeaderFrom:   from,
 			Helo:         data.Helo,
 			MailData:     string(data.Data),
 			Ip:           ip.IP,
 		})
 		if result.Reject {
-      logrus.Infof("rejecting incoming mail for reason: %v", result.Reason)
+			logrus.Infof("rejecting incoming mail for reason: %v", result.Reason)
 			return errors.New(result.Reason)
 		}
 		subject := parsedMail.Subject

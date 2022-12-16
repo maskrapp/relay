@@ -4,7 +4,10 @@ import (
 	"context"
 
 	"github.com/maskrapp/relay/internal/check"
+	"github.com/maskrapp/relay/internal/global"
+	"github.com/maskrapp/relay/internal/rbl"
 	"github.com/maskrapp/relay/internal/validation/checks"
+	"github.com/sirupsen/logrus"
 )
 
 type MailValidator struct {
@@ -18,13 +21,13 @@ type CheckResponse struct {
 	Quarantine bool
 }
 
-var statelessChecks = map[string]check.Check{
-	"spf":         checks.SpfCheck{},
-	"dkim":        checks.DkimCheck{},
-	"reverse_dns": checks.ReverseDnsCheck{},
-}
-
-func NewValidator() *MailValidator {
+func NewValidator(ctx global.Context) *MailValidator {
+	var statelessChecks = map[string]check.Check{
+		"spf":         checks.SpfCheck{},
+		"dkim":        checks.DkimCheck{},
+		"reverse_dns": checks.ReverseDnsCheck{},
+		"dnsbl":       checks.BlacklistCheck{List: rbl.CreateRBL(ctx)},
+	}
 	return &MailValidator{statelessChecks}
 }
 
@@ -38,6 +41,7 @@ func (v *MailValidator) RunChecks(c context.Context, values check.CheckValues) C
 		response := v.Validate(ctx, values)
 
 		if response.Reject {
+			logrus.Info("received reject from check %v with response: %v", k, response)
 			cancel()
 			return CheckResponse{
 				Reject: true,
@@ -63,12 +67,8 @@ func (v *MailValidator) RunChecks(c context.Context, values check.CheckValues) C
 		}
 	}
 
-	if dmarcResult.Quarantine {
-		quarantine = true
-	}
-
 	return CheckResponse{
 		Reject:     false,
-		Quarantine: quarantine,
+		Quarantine: quarantine || dmarcResult.Quarantine,
 	}
 }
