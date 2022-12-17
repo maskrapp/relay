@@ -5,13 +5,11 @@ import (
 	"time"
 
 	"github.com/maskrapp/relay/internal/config"
-	"github.com/maskrapp/relay/internal/mailer"
 	"gorm.io/gorm"
 )
 
 type Instances struct {
-	Gorm   *gorm.DB
-	Mailer *mailer.Mailer
+	Gorm *gorm.DB
 }
 
 type Context interface {

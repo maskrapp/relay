@@ -10,7 +10,6 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/maskrapp/relay/internal/config"
 	"github.com/maskrapp/relay/internal/global"
-	"github.com/maskrapp/relay/internal/mailer"
 	"github.com/maskrapp/relay/internal/service"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
@@ -35,8 +34,7 @@ func main() {
 	}
 
 	instances := &global.Instances{
-		Gorm:   db,
-		Mailer: mailer.New(cfg.ZeptoMail.EmailToken),
+		Gorm: db,
 	}
 
 	globalContext := global.NewContext(context.Background(), instances, cfg)

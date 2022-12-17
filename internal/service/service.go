@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/DusanKasan/parsemail"
@@ -14,9 +13,11 @@ import (
 	"github.com/maskrapp/relay/internal/check"
 	"github.com/maskrapp/relay/internal/database"
 	"github.com/maskrapp/relay/internal/global"
+	"github.com/maskrapp/relay/internal/mailer"
 	"github.com/maskrapp/relay/internal/validation"
 	"github.com/sirupsen/logrus"
 	"github.com/thohui/smtpd"
+	"gorm.io/gorm"
 )
 
 type Relay struct {
@@ -26,15 +27,18 @@ type Relay struct {
 func New(ctx global.Context) *Relay {
 	domains, err := database.GetAvailableDomains(ctx.Instances().Gorm)
 	if err != nil {
-		logrus.Error("DB error(GetAvailableDomains): ", err)
+		logrus.Panic("DB error(GetAvailableDomains): ", err)
 	}
+
+	validator := validation.NewValidator(ctx)
+	mailer := mailer.New(ctx.Config().ZeptoMail.EmailToken)
 
 	smtpdServer := &smtpd.Server{
 		Addr: "0.0.0.0:25",
 		HandlerRcpt: func(remoteAddr net.Addr, from, to string) bool {
 			return database.IsValidRecipient(ctx.Instances().Gorm, to, domains)
 		},
-		Handler: handler(ctx, domains),
+		Handler: createHandler(ctx.Instances().Gorm, validator, mailer, domains),
 	}
 
 	if ctx.Config().Production {
@@ -69,9 +73,7 @@ func (r *Relay) Shutdown() {
 		logrus.Error(err)
 	}
 }
-
-func handler(ctx global.Context, availableDomains []models.Domain) smtpd.Handler {
-	validator := validation.NewValidator(ctx)
+func createHandler(db *gorm.DB, validator *validation.MailValidator, mailer *mailer.Mailer, availableDomains []models.Domain) smtpd.Handler {
 	return func(data smtpd.HandlerData) error {
 		parsedMail, err := parsemail.Parse(bytes.NewReader(data.Data))
 		if err != nil {
@@ -89,16 +91,7 @@ func handler(ctx global.Context, availableDomains []models.Domain) smtpd.Handler
 			from = parsedMail.From[0].Address
 		}
 
-		fromSplit := strings.Split(from, "@")
-		if len(fromSplit) != 2 {
-			return errors.New("invalid address")
-		}
-
-		envelopeSplit := strings.Split(from, "@")
-
-		if len(envelopeSplit) != 2 {
-			return errors.New("invalid address")
-		}
+		ctx := context.TODO() //TODO: change the context once this is implemented in the smtpd package.
 		result := validator.RunChecks(ctx, check.CheckValues{
 			EnvelopeFrom: data.From, //FIXME: this can be empty sometimes???
 			HeaderFrom:   from,
@@ -115,7 +108,6 @@ func handler(ctx global.Context, availableDomains []models.Domain) smtpd.Handler
 		if result.Quarantine {
 			subject = "[SPAM] " + subject
 		}
-		db := ctx.Instances().Gorm
 		recipients := database.GetValidRecipients(db, data.To, availableDomains)
 		if len(recipients) == 0 {
 			logrus.Debug("found no valid recipients for ", data.To)
@@ -125,7 +117,8 @@ func handler(ctx global.Context, availableDomains []models.Domain) smtpd.Handler
 		if len(data.To) == 1 {
 			forwardAddress = data.To[0]
 		}
-		err = ctx.Instances().Mailer.ForwardMail(parsedMail.From[0].Name, forwardAddress, subject, parsedMail.HTMLBody, parsedMail.TextBody, recipients)
+
+		err = mailer.ForwardMail(parsedMail.From[0].Name, forwardAddress, subject, parsedMail.HTMLBody, parsedMail.TextBody, recipients)
 		if err != nil {
 			logrus.Error(err)
 			go func() {
