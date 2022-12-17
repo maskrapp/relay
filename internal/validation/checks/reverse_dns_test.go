@@ -17,6 +17,6 @@ func TestReverseDNS(t *testing.T) {
 		Helo: "mail-wr1-f51.google.com",
 	}
 
-	result := c.Check(context.Background(), values)
+	result := c.Validate(context.Background(), values)
 	assert.Equal(t, true, result.Success)
 }
