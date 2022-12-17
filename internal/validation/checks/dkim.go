@@ -2,15 +2,11 @@ package checks
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/emersion/go-msgauth/dkim"
 	"github.com/maskrapp/relay/internal/check"
 )
-
-var errNoDKIMRecord = errors.New("domain does not have any DKIM records")
-var errInvalidRecord = errors.New("DKIM check failed")
 
 type DkimCheck struct{}
 
@@ -28,7 +24,7 @@ func (c DkimCheck) Validate(ctx context.Context, values check.CheckValues) check
 	}
 	if len(verifications) == 0 {
 		return check.CheckResult{
-			Message: errNoDKIMRecord.Error(),
+			Message: "Domain does not have any DKIM records",
 			Success: false,
 			Data: map[string]any{
 				"dkim_pass": false,
@@ -49,7 +45,7 @@ func (c DkimCheck) Validate(ctx context.Context, values check.CheckValues) check
 	}
 
 	return check.CheckResult{
-		Message: errInvalidRecord.Error(),
+		Message: "DKIM check failed",
 		Success: false,
 		Data: map[string]any{
 			"dkim_pass": false,
