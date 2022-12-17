@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/emersion/go-msgauth/dmarc"
@@ -18,16 +19,16 @@ func (c *DmarcCheck) Validate(ctx context.Context, values check.CheckValues, sta
 	split := strings.Split(values.HeaderFrom, "@")
 	if len(split) != 2 {
 		return check.CheckResult{
-			Message: "headerFrom split failed",
+			Message: fmt.Sprintf("headerFrom split failed: %v", values.HeaderFrom),
 			Success: false,
 			Reject:  true,
 		}
 	}
 
 	split2 := strings.Split(values.EnvelopeFrom, "@")
-	if len(split) != 2 {
+	if len(split2) != 2 {
 		return check.CheckResult{
-			Message: "envelopeFrom split failed",
+			Message: fmt.Sprintf("envelopeFrom split failed: %v", values.EnvelopeFrom),
 			Success: false,
 			Reject:  true,
 		}
@@ -35,7 +36,6 @@ func (c *DmarcCheck) Validate(ctx context.Context, values check.CheckValues, sta
 
 	headerFromDomain := split[1]
 	envelopeFromDomain := split2[1]
-
 	result, err := dmarc.Lookup(headerFromDomain)
 
 	val, ok := state["dkim_pass"]
