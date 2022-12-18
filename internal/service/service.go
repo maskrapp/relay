@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/DusanKasan/parsemail"
@@ -34,7 +35,16 @@ func New(ctx global.Context) *Relay {
 	mailer := mailer.New(ctx.Config().ZeptoMail.EmailToken)
 
 	smtpdServer := &smtpd.Server{
-		Addr: "0.0.0.0:25",
+		Addr:  "0.0.0.0:25",
+		Debug: ctx.Config().Logger.LogLevel == "debug",
+		LogWrite: func(remoteIP, verb, line string) {
+			if !strings.Contains(line, "smtpd ESMTP Service ready") {
+				logrus.Infof("[WRITE] %v %v %v", remoteIP, verb, line)
+			}
+		},
+		LogRead: func(remoteIP, verb, line string) {
+			logrus.Infof("[READ] %v %v %v", remoteIP, verb, line)
+		},
 		HandlerRcpt: func(remoteAddr net.Addr, from, to string) bool {
 			return database.IsValidRecipient(ctx.Instances().Gorm, to, domains)
 		},
