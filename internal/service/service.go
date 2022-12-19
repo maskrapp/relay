@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -46,7 +47,8 @@ func New(ctx global.Context) *Relay {
 			logrus.Infof("[READ] %v %v %v", remoteIP, verb, line)
 		},
 		HandlerRcpt: func(remoteAddr net.Addr, from, to string) bool {
-			return database.IsValidRecipient(ctx.Instances().Gorm, to, domains)
+			_, err := mail.ParseAddress(from)
+			return err == nil && database.IsValidRecipient(ctx.Instances().Gorm, to, domains)
 		},
 		Handler: createHandler(ctx.Instances().Gorm, validator, mailer, domains),
 	}
