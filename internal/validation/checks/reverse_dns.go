@@ -26,7 +26,7 @@ func (c ReverseDnsCheck) Validate(ctx context.Context, values check.CheckValues)
 		logrus.Debugf("PTR record %v does not match hostname %v", ptrRecord, values.Helo)
 		return check.CheckResult{
 			Success: false,
-			Reject:  true,
+			Reject:  false,
 			Message: fmt.Sprintf("PTR record(%v) does not match helo(%v)", ptrRecord, values.Helo),
 		}
 	}
