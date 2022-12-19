@@ -41,7 +41,7 @@ func (v *MailValidator) RunChecks(c context.Context, values check.CheckValues) C
 		response := v.Validate(ctx, values)
 
 		if response.Reject {
-			logrus.Info("received reject from check %v with response: %v", k, response)
+			logrus.Infof("received reject from check %v with response: %v", k, response)
 			cancel()
 			return CheckResponse{
 				Reject: true,
