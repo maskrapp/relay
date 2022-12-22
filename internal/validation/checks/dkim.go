@@ -11,7 +11,23 @@ import (
 type DkimCheck struct{}
 
 func (c DkimCheck) Validate(ctx context.Context, values check.CheckValues) check.CheckResult {
+	resultChan := make(chan check.CheckResult, 1)
+	go func() {
+		result := c.runCheck(values)
+		resultChan <- result
+	}()
+	select {
+	case <-ctx.Done():
+		return check.CheckResult{
+			Success: false,
+			Message: "check was cancelled by context",
+		}
+	case result := <-resultChan:
+		return result
+	}
+}
 
+func (c DkimCheck) runCheck(values check.CheckValues) check.CheckResult {
 	verifications, err := dkim.Verify(strings.NewReader(values.MailData))
 	if err != nil {
 		return check.CheckResult{

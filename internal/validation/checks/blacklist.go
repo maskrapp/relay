@@ -17,6 +17,23 @@ type BlacklistCheck struct {
 }
 
 func (c BlacklistCheck) Validate(ctx context.Context, values check.CheckValues) check.CheckResult {
+	resultChan := make(chan check.CheckResult, 1)
+	go func() {
+		result := c.runCheck(values)
+		resultChan <- result
+	}()
+	select {
+	case <-ctx.Done():
+		return check.CheckResult{
+			Success: false,
+			Message: "check was cancelled by context",
+		}
+	case result := <-resultChan:
+		return result
+	}
+}
+
+func (c BlacklistCheck) runCheck(values check.CheckValues) check.CheckResult {
 	reversedIp := c.reverseIp(values.Ip)
 	queries := make([]lookupResult, 0)
 	mutex := sync.Mutex{}
