@@ -49,8 +49,13 @@ func (v *MailValidator) RunChecks(c context.Context, values check.CheckValues) C
 	start := time.Now()
 	for k, v := range v.checks {
 		key, value := k, v
+		logrus.Debugf("Running check %v", key)
 		eg.Go(func() error {
-			logrus.Debugf("running check %v", key)
+			now := time.Now()
+			defer func() {
+				elapsed := time.Since(now)
+				logrus.Info("Finished check %v in %vms", key, elapsed.Milliseconds())
+			}()
 			result := value.Validate(ctx, values)
 			if result.Reject {
 				once.Do(func() {
@@ -73,13 +78,13 @@ func (v *MailValidator) RunChecks(c context.Context, values check.CheckValues) C
 			return nil
 		})
 	}
+	eg.Wait()
 	if reject != nil {
 		return CheckResponse{
 			Reject: true,
 			Reason: reject.Reason,
 		}
 	}
-	eg.Wait()
 	//TODO: implement the stateful checks properly
 	dmarcCheck := &checks.DmarcCheck{}
 	dmarcResult := dmarcCheck.Validate(ctx, values, state)
