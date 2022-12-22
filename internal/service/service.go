@@ -36,8 +36,9 @@ func New(ctx global.Context) *Relay {
 	mailer := mailer.New(ctx.Config().ZeptoMail.EmailToken)
 
 	smtpdServer := &smtpd.Server{
-		Addr:  "0.0.0.0:25",
-		Debug: ctx.Config().Logger.LogLevel == "debug",
+		Addr:     "0.0.0.0:25",
+		Hostname: ctx.Config().Hostname,
+		Debug:    ctx.Config().Logger.LogLevel == "debug",
 		LogWrite: func(remoteIP, verb, line string) {
 			if !strings.Contains(line, "smtpd ESMTP Service ready") {
 				logrus.Infof("[WRITE] %v %v %v", remoteIP, verb, line)
@@ -104,13 +105,14 @@ func createHandler(db *gorm.DB, validator *validation.MailValidator, mailer *mai
 		}
 
 		ctx := context.TODO() //TODO: change the context once this is implemented in the smtpd package.
-		result := validator.RunChecks(ctx, check.CheckValues{
-			EnvelopeFrom: data.From, //FIXME: this can be empty sometimes???
+		values := check.CheckValues{
+			EnvelopeFrom: data.From,
 			HeaderFrom:   from,
 			Helo:         data.Helo,
 			MailData:     string(data.Data),
 			Ip:           ip.IP,
-		})
+		}
+		result := validator.RunChecks(ctx, values)
 		if result.Reject {
 			logrus.Infof("rejecting incoming mail for reason: %v", result.Reason)
 			return errors.New(result.Reason)

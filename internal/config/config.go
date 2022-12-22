@@ -28,6 +28,7 @@ type Config struct {
 	}
 	Production    bool
 	SpamhausToken string
+	Hostname      string
 }
 
 func New() *Config {
@@ -48,8 +49,9 @@ func New() *Config {
 	cfg.Logger.LogLevel = getOrDefault("LOG_LEVEL", "debug")
 
 	cfg.Production = getOrDefault("PRODUCTION", "true") == "true"
-  cfg.SpamhausToken = os.Getenv("SPAMHAUS_TOKEN")
-
+	cfg.SpamhausToken = os.Getenv("SPAMHAUS_TOKEN")
+	defaultHostname, _ := os.Hostname()
+	cfg.Hostname = getOrDefault("HOSTNAME", defaultHostname)
 	return cfg
 }
 
