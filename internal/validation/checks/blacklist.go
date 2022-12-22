@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/maskrapp/relay/internal/check"
@@ -18,26 +19,42 @@ type BlacklistCheck struct {
 func (c BlacklistCheck) Validate(ctx context.Context, values check.CheckValues) check.CheckResult {
 	reversedIp := c.reverseIp(values.Ip)
 	queries := make([]lookupResult, 0)
+	mutex := sync.Mutex{}
+	wg := sync.WaitGroup{}
 	start := time.Now()
+	blacklisted := false
 	for _, v := range c.List {
-		result, err := c.query(reversedIp, v)
-		if err != nil {
-			logrus.Infof("received unexpected error(%v) while querying %v", err, v)
-			continue
-		}
-		if result.Exists {
-			return check.CheckResult{
-				Reject:  true,
-				Message: fmt.Sprintf("IP was found on server: %v with reason(s): %v", v, result.Reasons),
+		wg.Add(1)
+		go func(server string) {
+			defer wg.Done()
+			result := c.query(reversedIp, server)
+			if result.Error != nil {
+				logrus.Info("received unexpected error: %v", result.Error)
 			}
-		}
-		queries = append(queries, result)
+			if result.Exists {
+				blacklisted = true
+			}
+			mutex.Lock()
+			queries = append(queries, result)
+			mutex.Unlock()
+		}(v)
 	}
+	wg.Wait()
 	elapsed := time.Since(start)
-	logrus.Infof("queried ip %v in %fms: %v", values.Ip, elapsed.Milliseconds(), queries)
+	logrus.Infof("queried ip %v in %vms: %v", values.Ip, elapsed.Milliseconds(), queries)
+	if !blacklisted {
+		return check.CheckResult{
+			Success: true,
+			Message: "Valid IP",
+		}
+	}
+	reasons := make([]string, 0)
+	for _, v := range queries {
+		reasons = append(reasons, v.Reasons...)
+	}
 	return check.CheckResult{
-		Success: true,
-		Message: "Valid IP",
+		Reject:  true,
+		Message: fmt.Sprintf("IP address is blacklisted for the following reason(s): %v", reasons),
 	}
 }
 
@@ -45,19 +62,19 @@ type lookupResult struct {
 	Address string
 	Exists  bool
 	Reasons []string
+	Error   error
 }
 
-func (c BlacklistCheck) query(reversedIp, server string) (lookupResult, error) {
+func (c BlacklistCheck) query(reversedIp, server string) lookupResult {
 	address := fmt.Sprintf("%v.%v", reversedIp, server)
 	res, err := net.LookupHost(address)
 	if err != nil {
 		if strings.Contains(err.Error(), "no such host") {
 			return lookupResult{
 				Address: address,
-				Exists:  false,
-			}, nil
+			}
 		}
-		return lookupResult{}, err
+		return lookupResult{Address: address, Error: err}
 	}
 	result := lookupResult{Address: address}
 	for _, v := range res {
@@ -73,7 +90,7 @@ func (c BlacklistCheck) query(reversedIp, server string) (lookupResult, error) {
 			result.Reasons = append(result.Reasons, v)
 		}
 	}
-	return result, nil
+	return result
 }
 
 func (c BlacklistCheck) reverseIp(ip net.IP) string {
