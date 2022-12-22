@@ -2,12 +2,17 @@ package validation
 
 import (
 	"context"
+	"errors"
+	"sync"
+	"time"
 
 	"github.com/maskrapp/relay/internal/check"
 	"github.com/maskrapp/relay/internal/global"
 	"github.com/maskrapp/relay/internal/rbl"
+	"github.com/maskrapp/relay/internal/syncmap"
 	"github.com/maskrapp/relay/internal/validation/checks"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 )
 
 type MailValidator struct {
@@ -32,41 +37,60 @@ func NewValidator(ctx global.Context) *MailValidator {
 }
 
 func (v *MailValidator) RunChecks(c context.Context, values check.CheckValues) CheckResponse {
-	var responses = make(map[string]check.CheckResult)
-	var state = make(map[string]any)
-	var quarantine bool
-	ctx, cancel := context.WithCancel(c)
-	defer cancel()
+	results := syncmap.Map[string, check.CheckResult]{}
+	stateMutex := sync.Mutex{}
+	state := make(map[string]interface{})
+	quarantine := false
+	var reject *struct {
+		Reason string
+	} = nil
+	once := sync.Once{}
+	eg, ctx := errgroup.WithContext(c)
+	start := time.Now()
 	for k, v := range v.checks {
-		response := v.Validate(ctx, values)
-
-		if response.Reject {
-			logrus.Infof("received reject from check %v with response: %v", k, response)
-			cancel()
-			return CheckResponse{
-				Reject: true,
-				Reason: response.Message,
+		key, value := k, v
+		eg.Go(func() error {
+			logrus.Debugf("running check %v", key)
+			result := value.Validate(ctx, values)
+			if result.Reject {
+				once.Do(func() {
+					reject = &struct{ Reason string }{
+						Reason: result.Message,
+					}
+				})
+				logrus.Infof("received reject from check %v with response: %v", key, result)
+				return errors.New("received reject")
 			}
-		}
-		if response.Quarantine {
-			quarantine = true
-		}
-		responses[k] = response
-		for k2, v2 := range response.Data {
-			state[k2] = v2
+			if result.Quarantine {
+				quarantine = true
+			}
+			results.Store(key, result)
+			stateMutex.Lock()
+			for k2, v2 := range result.Data {
+				state[k2] = v2
+			}
+			stateMutex.Unlock()
+			return nil
+		})
+	}
+	if reject != nil {
+		return CheckResponse{
+			Reject: true,
+			Reason: reject.Reason,
 		}
 	}
+	eg.Wait()
 	//TODO: implement the stateful checks properly
 	dmarcCheck := &checks.DmarcCheck{}
 	dmarcResult := dmarcCheck.Validate(ctx, values, state)
-
+	elapsed := time.Since(start)
+	logrus.Debugf("Finished all checks in %vms", elapsed.Milliseconds())
 	if dmarcResult.Reject {
 		return CheckResponse{
 			Reject: true,
 			Reason: dmarcResult.Message,
 		}
 	}
-
 	return CheckResponse{
 		Reject:     false,
 		Quarantine: quarantine || dmarcResult.Quarantine,
