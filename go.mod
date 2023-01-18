@@ -1,6 +1,6 @@
 module github.com/maskrapp/relay
 
-go 1.18
+go 1.19
 
 require blitiri.com.ar/go/spf v1.5.1
 
