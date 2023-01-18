@@ -26,6 +26,9 @@ type Config struct {
 	Logger struct {
 		LogLevel string
 	}
+	GRPC struct {
+		BackendHost string
+	}
 	Production    bool
 	SpamhausToken string
 	Hostname      string
@@ -47,6 +50,8 @@ func New() *Config {
 	cfg.TLS.PrivateKeyPath = os.Getenv("PRIVATE_KEY")
 
 	cfg.Logger.LogLevel = getOrDefault("LOG_LEVEL", "debug")
+
+  cfg.GRPC.BackendHost = os.Getenv("GRPC_BACKEND")
 
 	cfg.Production = getOrDefault("PRODUCTION", "true") == "true"
 	cfg.SpamhausToken = os.Getenv("SPAMHAUS_TOKEN")

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -10,10 +9,11 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/maskrapp/relay/internal/config"
 	"github.com/maskrapp/relay/internal/global"
+	backend "github.com/maskrapp/relay/internal/pb/backend/v1"
 	"github.com/maskrapp/relay/internal/service"
 	"github.com/sirupsen/logrus"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -25,16 +25,16 @@ func main() {
 		ll = logrus.DebugLevel
 	}
 	logrus.SetLevel(ll)
-
-	uri := fmt.Sprintf("postgres://%v:%v@%v/%v", cfg.Database.Username, cfg.Database.Password, cfg.Database.Host, cfg.Database.Database)
-
-	db, err := gorm.Open(postgres.Open(uri), &gorm.Config{})
+	conn, err := grpc.Dial(
+		cfg.GRPC.BackendHost,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
-		logrus.Panic(err)
+		logrus.Panicf("grpc error: %s", err)
 	}
 
 	instances := &global.Instances{
-		Gorm: db,
+		BackendClient: backend.NewBackendServiceClient(conn),
 	}
 
 	globalContext := global.NewContext(context.Background(), instances, cfg)

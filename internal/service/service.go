@@ -11,15 +11,15 @@ import (
 	"time"
 
 	"github.com/DusanKasan/parsemail"
-	"github.com/maskrapp/common/models"
 	"github.com/maskrapp/relay/internal/check"
-	"github.com/maskrapp/relay/internal/database"
 	"github.com/maskrapp/relay/internal/global"
 	"github.com/maskrapp/relay/internal/mailer"
+	backend "github.com/maskrapp/relay/internal/pb/backend/v1"
 	"github.com/maskrapp/relay/internal/validation"
 	"github.com/sirupsen/logrus"
 	"github.com/thohui/smtpd"
-	"gorm.io/gorm"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type Relay struct {
@@ -27,11 +27,6 @@ type Relay struct {
 }
 
 func New(ctx global.Context) *Relay {
-	domains, err := database.GetAvailableDomains(ctx.Instances().Gorm)
-	if err != nil {
-		logrus.Panic("DB error(GetAvailableDomains): ", err)
-	}
-
 	validator := validation.NewValidator(ctx)
 	mailer := mailer.New(ctx.Config().ZeptoMail.EmailToken)
 
@@ -47,11 +42,8 @@ func New(ctx global.Context) *Relay {
 		LogRead: func(remoteIP, verb, line string) {
 			logrus.Infof("[READ] %v %v %v", remoteIP, verb, line)
 		},
-		HandlerRcpt: func(remoteAddr net.Addr, from, to string) bool {
-			_, err := mail.ParseAddress(from)
-			return err == nil && database.IsValidRecipient(ctx.Instances().Gorm, to, domains)
-		},
-		Handler: createHandler(ctx.Instances().Gorm, validator, mailer, domains),
+		HandlerRcpt: createHanderRcpt(ctx.Instances().BackendClient),
+		Handler:     createHandler(ctx.Instances().BackendClient, validator, mailer),
 	}
 
 	if ctx.Config().Production {
@@ -63,8 +55,6 @@ func New(ctx global.Context) *Relay {
 		smtpdServer.TLSRequired = true
 		logrus.Info("Enabled TLS")
 	}
-
-	logrus.Info("Available domains: ", domains)
 
 	return &Relay{smtpd: smtpdServer}
 }
@@ -86,7 +76,26 @@ func (r *Relay) Shutdown() {
 		logrus.Error(err)
 	}
 }
-func createHandler(db *gorm.DB, validator *validation.MailValidator, mailer *mailer.Mailer, availableDomains []models.Domain) smtpd.Handler {
+
+func createHanderRcpt(backendClient backend.BackendServiceClient) smtpd.HandlerRcpt {
+	return func(remoteAddr net.Addr, from, to string) bool {
+		_, err := mail.ParseAddress(from)
+		if err != nil {
+			return false
+		}
+		_, err = backendClient.CheckMask(context.TODO(), &backend.CheckMaskRequest{MaskAddress: to})
+		if err != nil {
+			status := status.Convert(err)
+			if status.Code() != codes.NotFound {
+				logrus.Errorf("backend client err: %v", status.Err())
+			}
+			return false
+		}
+		return true
+	}
+}
+
+func createHandler(backendClient backend.BackendServiceClient, validator *validation.MailValidator, mailer *mailer.Mailer) smtpd.Handler {
 	return func(data smtpd.HandlerData) error {
 		parsedMail, err := parsemail.Parse(bytes.NewReader(data.Data))
 		if err != nil {
@@ -99,7 +108,7 @@ func createHandler(db *gorm.DB, validator *validation.MailValidator, mailer *mai
 		}
 		logrus.Debug("Incoming mail from:", parsedMail.From, data.From)
 
-		from := ""
+		var from string
 		if len(parsedMail.From) > 0 && parsedMail.From[0] != nil {
 			from = parsedMail.From[0].Address
 		}
@@ -122,40 +131,38 @@ func createHandler(db *gorm.DB, validator *validation.MailValidator, mailer *mai
 		if result.Quarantine {
 			subject = "[SPAM] " + subject
 		}
-		recipients := database.GetValidRecipients(db, data.To, availableDomains)
-		if len(recipients) == 0 {
-			logrus.Debug("found no valid recipients for ", data.To)
-			return nil
-		}
-		forwardAddress := "no-reply@maskr.app"
-		if len(data.To) == 1 {
-			forwardAddress = data.To[0]
+		// data.To will always have 1 element.
+		to := data.To[0]
+
+		resp, err := backendClient.GetMask(context.TODO(), &backend.GetMaskRequest{MaskAddress: to})
+		if err != nil {
+			logrus.Errorf("grpc error(GetMask): %v", err)
+			return err
 		}
 
-		err = mailer.ForwardMail(parsedMail.From[0].Name, forwardAddress, subject, parsedMail.HTMLBody, parsedMail.TextBody, recipients)
+		// Silently discard the email
+		if !resp.Enabled {
+			return nil
+		}
+
+		err = mailer.ForwardMail(parsedMail.From[0].Name, to, resp.Email, subject, parsedMail.HTMLBody, parsedMail.TextBody)
 		if err != nil {
-			logrus.Error(err)
+			logrus.Errorf("mailer err: %v", err)
 			go func() {
-				// TODO: do this in a single query
-				for _, v := range recipients {
-					innerErr := database.IncrementReceivedCount(db, v.Mask)
-					if innerErr != nil {
-						logrus.Error("DB error(IncrementReceivedCount): ", innerErr)
-					}
+				_, innerErr := backendClient.IncrementReceivedCount(context.TODO(), &backend.IncrementReceivedCountRequest{MaskAddress: to})
+				if innerErr != nil {
+					logrus.Error("grpc error(IncrementReceivedCount): ", innerErr)
 				}
 			}()
 			return err
 		}
 		go func() {
-			for _, v := range recipients {
-				// TODO: do this in a single query
-				innerErr := database.IncrementForwardedCount(db, v.Mask)
-				if innerErr != nil {
-					logrus.Error("DB error(IncrementForwardedCount): ", innerErr)
-				}
+			_, innerErr := backendClient.IncrementForwardedCount(context.TODO(), &backend.IncrementForwardedCountRequest{MaskAddress: to})
+			if innerErr != nil {
+				logrus.Error("DB error(IncrementForwardedCount): ", innerErr)
 			}
 		}()
-		logrus.Debugf("Forwarded mail to: %v from address: %v", recipients, forwardAddress)
+		logrus.Debugf("Forwarded mail to: %v from address: %v", resp.Email, to)
 		return nil
 	}
 }

@@ -5,11 +5,11 @@ import (
 	"time"
 
 	"github.com/maskrapp/relay/internal/config"
-	"gorm.io/gorm"
+	backend "github.com/maskrapp/relay/internal/pb/backend/v1"
 )
 
 type Instances struct {
-	Gorm *gorm.DB
+	BackendClient backend.BackendServiceClient
 }
 
 type Context interface {
