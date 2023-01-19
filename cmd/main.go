@@ -10,7 +10,7 @@ import (
 	"github.com/maskrapp/relay/internal/config"
 	"github.com/maskrapp/relay/internal/global"
 	backend "github.com/maskrapp/relay/internal/pb/backend/v1"
-	"github.com/maskrapp/relay/internal/service"
+	"github.com/maskrapp/relay/internal/smtp"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -39,10 +39,10 @@ func main() {
 
 	globalContext := global.NewContext(context.Background(), instances, cfg)
 
-	service := service.New(globalContext)
+	server := smtp.New(globalContext)
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go service.Start()
+	go server.ListenAndServe()
 	<-sigChan
-	service.Shutdown()
+	server.Shutdown(globalContext)
 }

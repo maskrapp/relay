@@ -1,4 +1,4 @@
-package service
+package smtp
 
 import (
 	"bytes"
@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/mail"
 	"strings"
-	"time"
 
 	"github.com/DusanKasan/parsemail"
 	"github.com/maskrapp/relay/internal/check"
@@ -22,11 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type Relay struct {
-	smtpd *smtpd.Server
-}
-
-func New(ctx global.Context) *Relay {
+func New(ctx global.Context) *smtpd.Server {
 	validator := validation.NewValidator(ctx)
 	mailer := mailer.New(ctx.Config().ZeptoMail.EmailToken)
 
@@ -56,25 +51,7 @@ func New(ctx global.Context) *Relay {
 		logrus.Info("Enabled TLS")
 	}
 
-	return &Relay{smtpd: smtpdServer}
-}
-
-func (r *Relay) Start() {
-	logrus.Info("Starting service...")
-	err := r.smtpd.ListenAndServe()
-	if err != nil {
-		logrus.Error("SMTPD error: ", err)
-	}
-}
-
-func (r *Relay) Shutdown() {
-	logrus.Info("Gracefully shutting down...")
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
-	err := r.smtpd.Shutdown(ctx)
-	if err != nil {
-		logrus.Error(err)
-	}
+	return smtpdServer
 }
 
 func createHanderRcpt(backendClient backend.BackendServiceClient) smtpd.HandlerRcpt {
