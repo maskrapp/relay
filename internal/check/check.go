@@ -23,5 +23,6 @@ type CheckValues struct {
 }
 
 type Check interface {
+	Name() string
 	Validate(context.Context, CheckValues) CheckResult
 }

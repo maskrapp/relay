@@ -10,6 +10,10 @@ import (
 
 type DkimCheck struct{}
 
+func (c DkimCheck) Name() string {
+  return "dkim"
+}
+
 func (c DkimCheck) Validate(ctx context.Context, values check.CheckValues) check.CheckResult {
 	resultChan := make(chan check.CheckResult, 1)
 	go func() {

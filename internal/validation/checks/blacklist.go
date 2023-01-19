@@ -16,6 +16,11 @@ type BlacklistCheck struct {
 	List []string
 }
 
+
+func (c BlacklistCheck) Name() string {
+  return "blacklist"
+}
+
 func (c BlacklistCheck) Validate(ctx context.Context, values check.CheckValues) check.CheckResult {
 	resultChan := make(chan check.CheckResult, 1)
 	go func() {

@@ -12,10 +12,13 @@ import (
 
 type ReverseDnsCheck struct{}
 
+func (c ReverseDnsCheck) Name() string {
+  return "reversedns"
+}
+
 func (c ReverseDnsCheck) Validate(ctx context.Context, values check.CheckValues) check.CheckResult {
 	resultChan := make(chan check.CheckResult, 1)
 	go func() {
-		logrus.Info("running rdns check")
 		result := c.runCheck(values)
 		resultChan <- result
 	}()

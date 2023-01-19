@@ -15,7 +15,11 @@ import (
 
 type DmarcCheck struct{}
 
-func (c *DmarcCheck) Validate(ctx context.Context, values check.CheckValues, state map[string]any) check.CheckResult {
+func (c DmarcCheck) Name() string {
+  return "dmarc"
+}
+
+func (c DmarcCheck) Validate(ctx context.Context, values check.CheckValues, state map[string]any) check.CheckResult {
 	split := strings.Split(values.HeaderFrom, "@")
 	if len(split) != 2 {
 		return check.CheckResult{

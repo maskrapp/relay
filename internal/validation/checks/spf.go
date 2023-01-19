@@ -10,6 +10,10 @@ import (
 
 type SpfCheck struct{}
 
+func (c SpfCheck) Name() string {
+	return "spf"
+}
+
 func (c SpfCheck) Validate(ctx context.Context, values check.CheckValues) check.CheckResult {
 	resultChan := make(chan check.CheckResult, 1)
 	go func() {
