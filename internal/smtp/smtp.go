@@ -16,7 +16,7 @@ import (
 	backend "github.com/maskrapp/relay/internal/pb/backend/v1"
 	"github.com/maskrapp/relay/internal/validation"
 	"github.com/sirupsen/logrus"
-	"github.com/thohui/smtpd"
+	"github.com/maskrapp/smtpd"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
