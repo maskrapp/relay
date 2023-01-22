@@ -125,6 +125,8 @@ func createHandler(backendClient backend.BackendServiceClient, validator *valida
 		err = mailer.ForwardMail(parsedMail.From[0].Name, to, resp.Email, subject, parsedMail.HTMLBody, parsedMail.TextBody)
 		if err != nil {
 			logrus.Errorf("mailer err: %v", err)
+
+      //TODO: this shouldn't be a synchronous action, perhaps we can use a message broker here?
 			go func() {
 				_, innerErr := backendClient.IncrementReceivedCount(context.TODO(), &backend.IncrementReceivedCountRequest{MaskAddress: to})
 				if innerErr != nil {
