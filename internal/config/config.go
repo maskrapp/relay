@@ -27,7 +27,7 @@ type Config struct {
 		LogLevel string
 	}
 	GRPC struct {
-		BackendHost string
+		MainAPIHost string
 	}
 	Production    bool
 	SpamhausToken string
@@ -51,7 +51,7 @@ func New() *Config {
 
 	cfg.Logger.LogLevel = getOrDefault("LOG_LEVEL", "debug")
 
-  cfg.GRPC.BackendHost = os.Getenv("GRPC_BACKEND")
+	cfg.GRPC.MainAPIHost = os.Getenv("API_GRPC")
 
 	cfg.Production = getOrDefault("PRODUCTION", "true") == "true"
 	cfg.SpamhausToken = os.Getenv("SPAMHAUS_TOKEN")

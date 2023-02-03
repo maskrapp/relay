@@ -5,11 +5,11 @@ import (
 	"time"
 
 	"github.com/maskrapp/relay/internal/config"
-	backend "github.com/maskrapp/relay/internal/pb/backend/v1"
+	main_api "github.com/maskrapp/relay/internal/pb/main_api/v1"
 )
 
 type Instances struct {
-	BackendClient backend.BackendServiceClient
+	GrpcClient main_api.MainAPIServiceClient
 }
 
 type Context interface {

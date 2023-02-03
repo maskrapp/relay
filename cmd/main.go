@@ -9,7 +9,7 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/maskrapp/relay/internal/config"
 	"github.com/maskrapp/relay/internal/global"
-	backend "github.com/maskrapp/relay/internal/pb/backend/v1"
+	main_api "github.com/maskrapp/relay/internal/pb/main_api/v1"
 	"github.com/maskrapp/relay/internal/smtp"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -26,7 +26,7 @@ func main() {
 	}
 	logrus.SetLevel(ll)
 	conn, err := grpc.Dial(
-		cfg.GRPC.BackendHost,
+		cfg.GRPC.MainAPIHost,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -34,7 +34,7 @@ func main() {
 	}
 
 	instances := &global.Instances{
-		BackendClient: backend.NewBackendServiceClient(conn),
+		GrpcClient: main_api.NewMainAPIServiceClient(conn),
 	}
 
 	globalContext := global.NewContext(context.Background(), instances, cfg)

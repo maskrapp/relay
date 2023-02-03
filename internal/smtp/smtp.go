@@ -13,10 +13,10 @@ import (
 	"github.com/maskrapp/relay/internal/check"
 	"github.com/maskrapp/relay/internal/global"
 	"github.com/maskrapp/relay/internal/mailer"
-	backend "github.com/maskrapp/relay/internal/pb/backend/v1"
+	main_api "github.com/maskrapp/relay/internal/pb/main_api/v1"
 	"github.com/maskrapp/relay/internal/validation"
-	"github.com/sirupsen/logrus"
 	"github.com/maskrapp/smtpd"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -37,8 +37,8 @@ func New(ctx global.Context) *smtpd.Server {
 		LogRead: func(remoteIP, verb, line string) {
 			logrus.Infof("[READ] %v %v %v", remoteIP, verb, line)
 		},
-		HandlerRcpt: createHanderRcpt(ctx.Instances().BackendClient),
-		Handler:     createHandler(ctx.Instances().BackendClient, validator, mailer),
+		HandlerRcpt: createHanderRcpt(ctx.Instances().GrpcClient),
+		Handler:     createHandler(ctx.Instances().GrpcClient, validator, mailer),
 	}
 
 	if ctx.Config().Production {
@@ -54,13 +54,13 @@ func New(ctx global.Context) *smtpd.Server {
 	return smtpdServer
 }
 
-func createHanderRcpt(backendClient backend.BackendServiceClient) smtpd.HandlerRcpt {
+func createHanderRcpt(backendClient main_api.MainAPIServiceClient) smtpd.HandlerRcpt {
 	return func(remoteAddr net.Addr, from, to string) bool {
 		_, err := mail.ParseAddress(from)
 		if err != nil {
 			return false
 		}
-		_, err = backendClient.CheckMask(context.TODO(), &backend.CheckMaskRequest{MaskAddress: to})
+		_, err = backendClient.CheckMask(context.TODO(), &main_api.CheckMaskRequest{MaskAddress: to})
 		if err != nil {
 			status := status.Convert(err)
 			if status.Code() != codes.NotFound {
@@ -72,7 +72,7 @@ func createHanderRcpt(backendClient backend.BackendServiceClient) smtpd.HandlerR
 	}
 }
 
-func createHandler(backendClient backend.BackendServiceClient, validator *validation.MailValidator, mailer *mailer.Mailer) smtpd.Handler {
+func createHandler(apiClient main_api.MainAPIServiceClient, validator *validation.MailValidator, mailer *mailer.Mailer) smtpd.Handler {
 	return func(data smtpd.HandlerData) error {
 		parsedMail, err := parsemail.Parse(bytes.NewReader(data.Data))
 		if err != nil {
@@ -111,7 +111,7 @@ func createHandler(backendClient backend.BackendServiceClient, validator *valida
 		// data.To will always have 1 element.
 		to := data.To[0]
 
-		resp, err := backendClient.GetMask(context.TODO(), &backend.GetMaskRequest{MaskAddress: to})
+		resp, err := apiClient.GetMask(context.TODO(), &main_api.GetMaskRequest{MaskAddress: to})
 		if err != nil {
 			logrus.Errorf("grpc error(GetMask): %v", err)
 			return err
@@ -126,9 +126,9 @@ func createHandler(backendClient backend.BackendServiceClient, validator *valida
 		if err != nil {
 			logrus.Errorf("mailer err: %v", err)
 
-      //TODO: this shouldn't be a synchronous action, perhaps we can use a message broker here?
+			//TODO: this shouldn't be a synchronous action, perhaps we can use a message broker here?
 			go func() {
-				_, innerErr := backendClient.IncrementReceivedCount(context.TODO(), &backend.IncrementReceivedCountRequest{MaskAddress: to})
+				_, innerErr := apiClient.IncrementReceivedCount(context.TODO(), &main_api.IncrementReceivedCountRequest{MaskAddress: to})
 				if innerErr != nil {
 					logrus.Error("grpc error(IncrementReceivedCount): ", innerErr)
 				}
@@ -136,7 +136,7 @@ func createHandler(backendClient backend.BackendServiceClient, validator *valida
 			return err
 		}
 		go func() {
-			_, innerErr := backendClient.IncrementForwardedCount(context.TODO(), &backend.IncrementForwardedCountRequest{MaskAddress: to})
+			_, innerErr := apiClient.IncrementForwardedCount(context.TODO(), &main_api.IncrementForwardedCountRequest{MaskAddress: to})
 			if innerErr != nil {
 				logrus.Error("DB error(IncrementForwardedCount): ", innerErr)
 			}
