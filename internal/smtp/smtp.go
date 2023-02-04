@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/mail"
 	"strings"
+	"time"
 
 	"github.com/DusanKasan/parsemail"
 	"github.com/maskrapp/relay/internal/check"
@@ -27,6 +28,7 @@ func New(ctx global.Context) *smtpd.Server {
 
 	smtpdServer := &smtpd.Server{
 		Addr:     "0.0.0.0:25",
+		Timeout:  time.Minute,
 		Hostname: ctx.Config().Hostname,
 		Debug:    ctx.Config().Logger.LogLevel == "debug",
 		LogWrite: func(remoteIP, verb, line string) {
