@@ -6,6 +6,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/maskrapp/relay/internal/check"
@@ -16,9 +17,8 @@ type BlacklistCheck struct {
 	List []string
 }
 
-
 func (c BlacklistCheck) Name() string {
-  return "blacklist"
+	return "blacklist"
 }
 
 func (c BlacklistCheck) Validate(ctx context.Context, values check.CheckValues) check.CheckResult {
@@ -44,17 +44,17 @@ func (c BlacklistCheck) runCheck(values check.CheckValues) check.CheckResult {
 	mutex := sync.Mutex{}
 	wg := sync.WaitGroup{}
 	start := time.Now()
-	blacklisted := false
+	blacklisted := atomic.Bool{}
+	wg.Add(len(c.List))
 	for _, v := range c.List {
-		wg.Add(1)
 		go func(server string) {
 			defer wg.Done()
 			result := c.query(reversedIp, server)
 			if result.Error != nil {
-				logrus.Info("received unexpected error: %v", result.Error)
+				logrus.Info("(blcheck) received unexpected error: %v", result.Error)
 			}
 			if result.Exists {
-				blacklisted = true
+				blacklisted.Store(true)
 			}
 			mutex.Lock()
 			queries = append(queries, result)
@@ -64,7 +64,7 @@ func (c BlacklistCheck) runCheck(values check.CheckValues) check.CheckResult {
 	wg.Wait()
 	elapsed := time.Since(start)
 	logrus.Infof("queried ip %v in %vms: %v", values.Ip, elapsed.Milliseconds(), queries)
-	if !blacklisted {
+	if !blacklisted.Load() {
 		return check.CheckResult{
 			Success: true,
 			Message: "Valid IP",
