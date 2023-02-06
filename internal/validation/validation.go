@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/maskrapp/relay/internal/check"
@@ -15,7 +16,6 @@ import (
 )
 
 type MailValidator struct {
-	// stateless checks
 	checks []check.Check
 }
 
@@ -38,7 +38,7 @@ func NewValidator(ctx global.Context) *MailValidator {
 func (v *MailValidator) RunChecks(c context.Context, values check.CheckValues) CheckResponse {
 	stateMutex := sync.Mutex{}
 	state := make(map[string]interface{})
-	quarantine := false
+	quarantine := atomic.Bool{}
 	var reject *struct {
 		Reason string
 	} = nil
@@ -65,7 +65,7 @@ func (v *MailValidator) RunChecks(c context.Context, values check.CheckValues) C
 				return fmt.Errorf("received reject from check %v", value.Name())
 			}
 			if result.Quarantine {
-				quarantine = true
+				quarantine.Store(true)
 			}
 			stateMutex.Lock()
 			for k2, v2 := range result.Data {
@@ -95,6 +95,6 @@ func (v *MailValidator) RunChecks(c context.Context, values check.CheckValues) C
 	}
 	return CheckResponse{
 		Reject:     false,
-		Quarantine: quarantine || dmarcResult.Quarantine,
+		Quarantine: quarantine.Load() || dmarcResult.Quarantine,
 	}
 }
