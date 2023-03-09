@@ -28,7 +28,7 @@ require (
 	github.com/emersion/go-msgauth v0.6.6
 	github.com/maskrapp/smtpd v0.0.0-20230122235213-d4339308da4a
 	github.com/sirupsen/logrus v1.9.0
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
 	golang.org/x/net v0.8.0
 	golang.org/x/sync v0.1.0
 	google.golang.org/grpc v1.53.0
